@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.env.*
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+!*.env.example
+!backend/.env.example
+
+# Local SQLite（含用户数据，勿提交或随源码交付）
+*.db
