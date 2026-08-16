@@ -1,45 +1,21 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { LogOut, Menu, Moon, Sun, User, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useAuth } from '@/contexts/AuthContext'
-import { useToast } from '@/contexts/ToastContext'
-import { useCallback, useEffect, useState } from 'react'
+import { useRootLayout } from '@/hooks/RootLayout/useRootLayout'
+import { t } from '@/lib/i18n'
+import { preloadRoute } from '@/lib/lazyRoutes'
 
 type NavItem = { to: string; label: string; end?: boolean }
 
 const nav: NavItem[] = [
-  { to: '/', label: '首页', end: true },
-  { to: '/jd', label: 'JD 解析' },
-  { to: '/resume', label: '简历' },
-  { to: '/interview', label: '模拟面试' },
+  { to: '/', label: t('RootLayout.navHome'), end: true },
+  { to: '/jd', label: t('RootLayout.navJd') },
+  { to: '/resume', label: t('RootLayout.navResume') },
+  { to: '/interview', label: t('RootLayout.navInterview') },
 ]
 
 export function RootLayout() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-  const { toast } = useToast()
-
-  const [navOpen, setNavOpen] = useState(false)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const raw = localStorage.getItem('theme')
-    if (raw === 'light' || raw === 'dark') return raw
-    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  })
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem('theme', theme)
-  }, [theme])
-
-  const toggleTheme = useCallback(() => {
-    setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
-    toast({ title: '主题已切换', message: theme === 'dark' ? '已切换为浅色' : '已切换为深色', variant: 'info' })
-  }, [theme, toast])
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
-  }
+  const { user, navOpen, theme, toggleNav, closeNav, toggleTheme, handleLogout } = useRootLayout()
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
@@ -50,15 +26,15 @@ export function RootLayout() {
             end
             className="text-sm font-semibold tracking-tight text-primary"
           >
-            AI Career
+            {t('RootLayout.brand')}
           </NavLink>
 
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setNavOpen((v) => !v)}
+              onClick={toggleNav}
               className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
-              aria-label="打开导航"
+              aria-label={t('RootLayout.openNav')}
             >
               {navOpen ? <X className="size-4" /> : <Menu className="size-4" />}
             </button>
@@ -69,6 +45,8 @@ export function RootLayout() {
                   key={to}
                   to={to}
                   end={end}
+                  onMouseEnter={() => preloadRoute(to)}
+                  onFocus={() => preloadRoute(to)}
                   className={({ isActive }) =>
                     [
                       'rounded-md px-3 py-1.5 transition-colors',
@@ -97,20 +75,26 @@ export function RootLayout() {
                     className="h-8 gap-1 text-muted-foreground"
                   >
                     <LogOut className="size-3.5" />
-                    退出
+                    {t('RootLayout.logout')}
                   </Button>
                 </>
               ) : (
                 <>
                   <NavLink
                     to="/login"
+                    onMouseEnter={() => preloadRoute('/login')}
+                    onFocus={() => preloadRoute('/login')}
                     className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
-                    登录
+                    {t('RootLayout.login')}
                   </NavLink>
-                  <NavLink to="/register">
+                  <NavLink
+                    to="/register"
+                    onMouseEnter={() => preloadRoute('/register')}
+                    onFocus={() => preloadRoute('/register')}
+                  >
                     <Button size="sm" className="h-8">
-                      注册
+                      {t('RootLayout.register')}
                     </Button>
                   </NavLink>
                 </>
@@ -122,7 +106,7 @@ export function RootLayout() {
               size="icon"
               onClick={toggleTheme}
               className="ml-2 hidden md:inline-flex"
-              aria-label="切换深色模式"
+              aria-label={t('RootLayout.toggleTheme')}
             >
               {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
@@ -137,7 +121,9 @@ export function RootLayout() {
                   key={to}
                   to={to}
                   end={end}
-                  onClick={() => setNavOpen(false)}
+                  onClick={closeNav}
+                  onMouseEnter={() => preloadRoute(to)}
+                  onFocus={() => preloadRoute(to)}
                   className={({ isActive }) =>
                     [
                       'rounded-md px-3 py-1.5 transition-colors',

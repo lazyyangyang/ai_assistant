@@ -1,24 +1,26 @@
 import { Link } from 'react-router-dom'
 import { FileSearch, FileText, Mic } from 'lucide-react'
+import { t } from '@/lib/i18n'
+import { preloadRoute } from '@/lib/lazyRoutes'
 
 const features = [
   {
     to: '/jd',
     icon: FileSearch,
-    title: 'JD 智能解析',
-    desc: '粘贴岗位描述，AI 提取关键技能与要求',
+    title: t('HomePage.jdTitle'),
+    desc: t('HomePage.jdDescription'),
   },
   {
     to: '/resume',
     icon: FileText,
-    title: '简历诊断与重写',
-    desc: '深度诊断简历短板，给出修改建议',
+    title: t('HomePage.resumeTitle'),
+    desc: t('HomePage.resumeDescription'),
   },
   {
     to: '/interview',
     icon: Mic,
-    title: '模拟面试',
-    desc: '沉浸式多轮面试，AI 实时追问',
+    title: t('HomePage.interviewTitle'),
+    desc: t('HomePage.interviewDescription'),
   },
 ] as const
 
@@ -27,10 +29,10 @@ export function HomePage() {
     <div className="flex flex-col items-center space-y-10 pt-8">
       <div className="space-y-3 text-center">
         <h1 className="text-4xl font-bold tracking-tight">
-          AI 求职辅助平台
+          {t('HomePage.title')}
         </h1>
         <p className="mx-auto max-w-lg text-muted-foreground">
-          基于大语言模型的全链路求职助手 — JD 解析、简历诊断、模拟面试，一站搞定。
+          {t('HomePage.description')}
         </p>
       </div>
 
@@ -39,6 +41,8 @@ export function HomePage() {
           <Link
             key={to}
             to={to}
+            onMouseEnter={() => preloadRoute(to)}
+            onFocus={() => preloadRoute(to)}
             className="group flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md"
           >
             <div className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">

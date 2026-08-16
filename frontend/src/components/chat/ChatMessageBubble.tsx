@@ -6,6 +6,7 @@ import { Bot, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+import { t } from '@/lib/i18n'
 import type { ChatMessage } from '@/types/chat'
 
 interface Props {
@@ -77,7 +78,7 @@ export function ChatMessageBubble({ message }: Props) {
           <div>
             <div className="mb-2 flex justify-end">
               <Button size="sm" variant="outline" onClick={handleCopy}>
-                {copied ? '已复制' : '一键复制重写内容'}
+                {copied ? t('ChatMessageBubble.copied') : t('ChatMessageBubble.copyRewrite')}
               </Button>
             </div>
             <div className="prose prose-sm dark:prose-invert max-w-none [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-zinc-900 [&_pre]:p-3 [&_code]:rounded [&_code]:bg-zinc-200 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-xs dark:[&_code]:bg-zinc-800 [&_pre_code]:bg-transparent [&_pre_code]:p-0">
@@ -105,7 +106,7 @@ export function ChatMessageBubble({ message }: Props) {
                           onClick={() => handleCopyCode(codeText)}
                           disabled={!codeText.trim()}
                         >
-                          {copiedCode === codeText ? '已复制' : '复制代码'}
+                          {copiedCode === codeText ? t('ChatMessageBubble.copied') : t('ChatMessageBubble.copyCode')}
                         </Button>
                       </div>
                       <pre>

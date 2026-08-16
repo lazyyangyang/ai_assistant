@@ -1,14 +1,24 @@
 const BASE = '/api'
 
-function getToken(): string | null {
-  return localStorage.getItem('token')
+let accessToken: string | null = null
+
+export function setAccessToken(token: string) {
+  accessToken = token
+}
+
+export function getAccessToken(): string | null {
+  return accessToken
+}
+
+export function clearAccessToken() {
+  accessToken = null
 }
 
 async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = getToken()
+  const token = getAccessToken()
   const headers: Record<string, string> = { ...(options.headers as Record<string, string>) }
   if (!(options.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json'
@@ -156,7 +166,7 @@ export async function apiTranscribeAudio(audio: Blob | File, language?: string) 
   if (audio instanceof File) {
     filename = audio.name
   } else {
-    // Blob 没有扩展名信息，但 type 往往包含 webm/ogg(opus)，尽量让后端按正确后缀落盘
+    // Blob names have no extension, so infer one from the MIME type for backend handling.
     const t = audio.type || ''
     if (t.includes('ogg')) filename = 'audio.ogg'
     else if (t.includes('webm')) filename = 'audio.webm'
@@ -175,7 +185,7 @@ export async function apiTranscribeAudio(audio: Blob | File, language?: string) 
 
 export async function apiSynthesizeTts(text: string) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = getToken()
+  const token = getAccessToken()
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }

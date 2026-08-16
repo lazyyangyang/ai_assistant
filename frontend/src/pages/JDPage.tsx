@@ -1,51 +1,27 @@
 import { ChatPanel } from '@/components/chat'
-import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import type { JDStructuredResult } from '@/types/chat'
-import { useToast } from '@/contexts/ToastContext'
-
-const SAVED_JD_KEY = 'saved_jd_result'
+import { useJDPage } from '@/hooks/JDPage/useJDPage'
+import { t } from '@/lib/i18n'
 
 export function JDPage() {
-  const { toast } = useToast()
-  const [structured, setStructured] = useState<JDStructuredResult | null>(null)
-  const [savedAt, setSavedAt] = useState<string>('')
-
-  const canSave = useMemo(
-    () =>
-      !!structured &&
-      (
-        structured.skills.length > 0 ||
-        structured.responsibilities.length > 0 ||
-        structured.hard_requirements.length > 0 ||
-        !!structured.summary
-      ),
-    [structured],
-  )
-
-  const handleSave = () => {
-    if (!structured) return
-    localStorage.setItem(SAVED_JD_KEY, JSON.stringify(structured))
-    setSavedAt(new Date().toLocaleString())
-    toast({ title: 'JD 已保存', message: '后续简历诊断与面试将使用该 JD', variant: 'success' })
-  }
+  const { structured, setStructured, savedAt, canSave, handleSave } = useJDPage()
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-medium">结构化解析结果</h2>
+          <h2 className="text-base font-medium">{t('JDPage.resultTitle')}</h2>
           <Button size="sm" onClick={handleSave} disabled={!canSave}>
-            保存结果
+            {t('JDPage.saveButton')}
           </Button>
         </div>
-        {savedAt && <p className="mb-2 text-xs text-muted-foreground">已保存：{savedAt}</p>}
+        {savedAt && <p className="mb-2 text-xs text-muted-foreground">{t('JDPage.savedAt', { savedAt })}</p>}
         {!structured ? (
-          <p className="text-sm text-muted-foreground">发送 JD 后会在这里展示结构化结果卡片。</p>
+          <p className="text-sm text-muted-foreground">{t('JDPage.emptyResult')}</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-md border border-border p-3">
-              <p className="mb-2 text-sm font-medium">技能列表</p>
+              <p className="mb-2 text-sm font-medium">{t('JDPage.skillsTitle')}</p>
               <ul className="list-disc space-y-1 pl-5 text-sm">
                 {structured.skills.map((item, idx) => (
                   <li key={`${item}-${idx}`}>{item}</li>
@@ -53,7 +29,7 @@ export function JDPage() {
               </ul>
             </div>
             <div className="rounded-md border border-border p-3">
-              <p className="mb-2 text-sm font-medium">岗位职责</p>
+              <p className="mb-2 text-sm font-medium">{t('JDPage.responsibilitiesTitle')}</p>
               <ul className="list-disc space-y-1 pl-5 text-sm">
                 {structured.responsibilities.map((item, idx) => (
                   <li key={`${item}-${idx}`}>{item}</li>
@@ -61,7 +37,7 @@ export function JDPage() {
               </ul>
             </div>
             <div className="rounded-md border border-border p-3">
-              <p className="mb-2 text-sm font-medium">硬性要求</p>
+              <p className="mb-2 text-sm font-medium">{t('JDPage.hardRequirementsTitle')}</p>
               <ul className="list-disc space-y-1 pl-5 text-sm">
                 {structured.hard_requirements.map((item, idx) => (
                   <li key={`${item}-${idx}`}>{item}</li>
@@ -70,7 +46,7 @@ export function JDPage() {
             </div>
             {!!structured.summary && (
               <div className="rounded-md border border-border p-3 md:col-span-3">
-                <p className="mb-2 text-sm font-medium">核心关注点</p>
+                <p className="mb-2 text-sm font-medium">{t('JDPage.summaryTitle')}</p>
                 <p className="text-sm">{structured.summary}</p>
               </div>
             )}
@@ -79,10 +55,10 @@ export function JDPage() {
       </div>
 
       <ChatPanel
-        title="JD 智能解析"
+        title={t('JDPage.chatTitle')}
         agentType="jd"
         onStructuredData={setStructured}
-        systemGreeting="你好！请将岗位描述（JD）粘贴到下方，我会帮你提取关键技能要求、岗位职责等结构化信息。"
+        systemGreeting={t('JDPage.systemGreeting')}
       />
     </div>
   )

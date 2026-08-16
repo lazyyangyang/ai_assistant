@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ChatMessageBubble } from './ChatMessageBubble'
+import { t } from '@/lib/i18n'
 
 describe('ChatMessageBubble', () => {
   it('should render code block copy button and copy code', async () => {
@@ -25,12 +26,11 @@ describe('ChatMessageBubble', () => {
       />,
     )
 
-    const copyButton = screen.getByRole('button', { name: '复制代码' })
+    const copyButton = screen.getByRole('button', { name: t('ChatMessageBubble.copyCode') })
     expect(copyButton).not.toBeDisabled()
     await user.click(copyButton)
 
-    // 成功复制后按钮文案会变为「已复制」。
-    expect(await screen.findByRole('button', { name: '已复制' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: t('ChatMessageBubble.copied') })).toBeInTheDocument()
   })
 })
 

@@ -1,5 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
+import { getAccessToken } from '@/lib/api'
+import { t } from '@/lib/i18n'
 import type { AgentType, ChatMessage, JDStructuredResult } from '@/types/chat'
 
 let nextId = 1
@@ -40,6 +43,7 @@ export function useStreamChat({
 }: UseStreamChatOptions) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { logout } = useAuth()
   const [messages, setMessages] = useState<ChatMessage[]>(() => buildGreeting(systemGreeting))
   const [isLoading, setIsLoading] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -94,7 +98,7 @@ export function useStreamChat({
           .filter((m) => m.content !== systemGreeting)
           .map((m) => ({ role: m.role, content: m.content }))
 
-        const token = localStorage.getItem('token')
+        const token = getAccessToken()
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (token) {
           headers.Authorization = `Bearer ${token}`
@@ -119,7 +123,7 @@ export function useStreamChat({
         }
 
         if (res.status === 401) {
-          localStorage.removeItem('token')
+          logout()
           setMessages((prev) => prev.filter((m) => m.id !== assistantMsgId))
           navigate('/login', { replace: true, state: { from: location } })
           return
@@ -180,7 +184,7 @@ export function useStreamChat({
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           assistantContent =
-            assistantContent || '抱歉，请求出错了，请稍后再试。'
+            assistantContent || t('useStreamChat.requestFailure')
           commitAssistantContent()
         }
       } finally {
@@ -192,6 +196,7 @@ export function useStreamChat({
       agentType,
       isLoading,
       location,
+      logout,
       messages,
       navigate,
       onSessionChange,

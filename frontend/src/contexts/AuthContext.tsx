@@ -2,11 +2,17 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useState,
   type ReactNode,
 } from 'react'
-import { apiGetMe, apiLogin, apiRegister, type UserInfo } from '@/lib/api'
+import {
+  apiGetMe,
+  apiLogin,
+  apiRegister,
+  clearAccessToken,
+  setAccessToken,
+  type UserInfo,
+} from '@/lib/api'
 
 interface AuthState {
   user: UserInfo | null
@@ -20,23 +26,11 @@ const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      setLoading(false)
-      return
-    }
-    apiGetMe()
-      .then(setUser)
-      .catch(() => localStorage.removeItem('token'))
-      .finally(() => setLoading(false))
-  }, [])
+  const [loading] = useState(false)
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await apiLogin(email, password)
-    localStorage.setItem('token', res.access_token)
+    setAccessToken(res.access_token)
     const me = await apiGetMe()
     setUser(me)
   }, [])
@@ -44,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(
     async (username: string, email: string, password: string) => {
       const res = await apiRegister(username, email, password)
-      localStorage.setItem('token', res.access_token)
+      setAccessToken(res.access_token)
       const me = await apiGetMe()
       setUser(me)
     },
@@ -52,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token')
+    clearAccessToken()
     setUser(null)
   }, [])
 

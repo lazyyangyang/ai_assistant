@@ -71,8 +71,8 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 前端默认地址：`http://localhost:5173`
@@ -144,7 +144,7 @@ pytest
 
 ```bash
 cd frontend
-npm run test
+pnpm run test
 ```
 
 ## 部署建议
