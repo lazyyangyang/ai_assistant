@@ -12,6 +12,8 @@ export function useInterviewPage() {
     apiGetResumes()
       .then((list) => {
         setResumes(list)
+        // The active resume is the global default context; the user can still
+        // override it locally for this interview without mutating resume metadata.
         const active = list.find((item) => item.is_active)
         setSelectedResumeId(active?.id ?? list[0]?.id ?? null)
       })
@@ -19,6 +21,8 @@ export function useInterviewPage() {
   }, [])
 
   useEffect(() => {
+    // JD is loaded independently from resume selection so an interview can use
+    // both contexts while keeping their persistence lifecycles separate.
     setSavedJdContext(loadSavedJdResult())
   }, [])
 

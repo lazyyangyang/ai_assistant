@@ -12,6 +12,8 @@ interface UseChatInputOptions {
 }
 
 function pickSupportedMimeType() {
+  // Prefer Opus containers that preserve speech quality at small sizes; the
+  // backend still normalizes non-WAV input because browser support varies.
   const candidates = [
     'audio/ogg;codecs=opus',
     'audio/ogg',
@@ -39,6 +41,8 @@ export function useChatInput({
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const mimeTypeRef = useRef('')
+  // MediaRecorder.onstop may fire after a newer recording starts. Sequence IDs
+  // prevent that stale callback from overwriting the newer input text.
   const stopSeqRef = useRef(0)
 
   const isVoiceBusy = isRecording || isTranscribing
@@ -56,7 +60,7 @@ export function useChatInput({
       try {
         mediaRecorderRef.current?.stop()
       } catch {
-        // ignore
+        // Recorder may already be inactive during unmount; tracks still need cleanup.
       }
       cleanupStream()
     }
@@ -116,6 +120,8 @@ export function useChatInput({
         }
       }
 
+      // Periodic chunks avoid one large in-memory allocation while keeping enough
+      // data available if the browser dispatches the final stop event late.
       recorder.start(250)
     } catch (err) {
       setIsRecording(false)
@@ -131,7 +137,7 @@ export function useChatInput({
     try {
       mediaRecorderRef.current.stop()
     } catch {
-      // ignore
+      // Pointer-up and browser lifecycle events can race; stopping twice is harmless.
     }
   }
 
@@ -145,6 +151,8 @@ export function useChatInput({
   const handleVoicePointerDown = async (e: PointerEvent<HTMLButtonElement>) => {
     if (!enableVoiceInput || busy) return
     e.preventDefault()
+    // Pointer capture guarantees release is observed even if the user drags
+    // outside the microphone button while holding it.
     e.currentTarget.setPointerCapture(e.pointerId)
     await startRecording()
   }
@@ -155,7 +163,7 @@ export function useChatInput({
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
     } catch {
-      // ignore
+      // Capture may already be released by the browser after cancellation.
     }
     stopRecording()
   }

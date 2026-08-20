@@ -11,6 +11,7 @@ from app.prompts import AGENT_SYSTEM_PROMPTS, INTERVIEW_EVALUATOR_SYSTEM
 
 
 def _build_llm(streaming: bool = True) -> ChatOpenAI:
+    """Build clients from runtime settings so providers can be swapped without agent changes."""
     settings = get_settings()
     return ChatOpenAI(
         model=settings.openai_model,
@@ -42,6 +43,8 @@ async def stream_agent_response(
 
     messages = [SystemMessage(content=system_prompt)]
     if resume_context:
+        # Context is a separate SystemMessage so user-authored resume text cannot
+        # replace the agent's behavioral instruction. Length caps also bound cost.
         messages.append(
             SystemMessage(
                 content=(
@@ -51,6 +54,8 @@ async def stream_agent_response(
             )
         )
     if jd_context:
+        # Reuse validated structured data rather than asking the model to infer the
+        # target role again in every resume/interview turn.
         messages.append(
             SystemMessage(
                 content=(
@@ -75,7 +80,7 @@ async def stream_agent_response(
 
 
 async def extract_jd_structured(jd_text: str) -> dict[str, object]:
-    """Extract structured JD information in JSON format."""
+    """Extract normalized JD JSON, returning a stable empty shape on provider failure."""
     llm = _build_llm(streaming=False)
     messages = [
         SystemMessage(
@@ -98,6 +103,9 @@ async def extract_jd_structured(jd_text: str) -> dict[str, object]:
             "summary": str(parsed.get("summary", "")),
         }
     except Exception:
+        # The chat response is still useful when secondary extraction fails. A
+        # stable shape lets the frontend render an empty result without branching
+        # on provider-specific exceptions or malformed JSON.
         return {
             "skills": [],
             "responsibilities": [],
@@ -115,6 +123,8 @@ async def extract_interview_feedback(
     """Extract interview evaluation JSON from conversation history."""
 
     def build_transcript(items: list[dict[str, str]]) -> str:
+        # Bound each turn and the final transcript to keep evaluation latency and
+        # token cost predictable for long-running interviews.
         lines: list[str] = []
         for msg in items:
             role = msg.get("role", "")
@@ -162,7 +172,9 @@ async def extract_interview_feedback(
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
         parsed = json.loads(content.strip())
 
-        # Minimal normalization to keep frontend stable.
+        # Normalize only the contract-critical container fields. The evaluator's
+        # human-readable text remains untouched, while malformed arrays cannot
+        # crash the end page.
         overall = parsed if isinstance(parsed, dict) else {}
         improvements = overall.get("improvements", [])
         if not isinstance(improvements, list):
@@ -176,4 +188,6 @@ async def extract_interview_feedback(
         overall.setdefault("overallSummary", "")
         return overall
     except Exception:
+        # Interview completion must remain navigable even if evaluation fails;
+        # persist an explicit zero-score fallback rather than losing the session.
         return fallback

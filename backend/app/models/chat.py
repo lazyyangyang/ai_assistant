@@ -19,6 +19,14 @@ class SessionStatus(str, enum.Enum):
     COMPLETED = "completed"
 
 
+class MessageStatus(str, enum.Enum):
+    """Durable lifecycle of an assistant response, independent of the SSE connection."""
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
@@ -49,5 +57,11 @@ class ChatMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[MessageStatus] = mapped_column(
+        # native_enum=False keeps SQLite and PostgreSQL migrations compatible;
+        # the Python enum still validates the finite state values in application code.
+        Enum(MessageStatus, native_enum=False, length=16),
+        default=MessageStatus.COMPLETED,
+    )
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")

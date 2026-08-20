@@ -13,15 +13,12 @@ export function ChatPanel({
   systemGreeting,
   selectedResumeId,
   selectedJdContext,
-  onStructuredData,
-  onLatestAssistantMessageChange,
   enableVoiceOutput = false,
   autoPlayVoiceOutput = true,
 }: ChatPanelProps) {
   const {
     sessions,
     activeSessionId,
-    setActiveSessionId,
     messages,
     isLoading,
     input,
@@ -33,6 +30,7 @@ export function ChatPanel({
     viewportRef,
     virtualizer,
     isSessionCompleted,
+    handleSelectSession,
     handleSend,
     handleNewChat,
     handleEndInterview,
@@ -44,8 +42,6 @@ export function ChatPanel({
     systemGreeting,
     selectedResumeId,
     selectedJdContext,
-    onStructuredData,
-    onLatestAssistantMessageChange,
     enableVoiceOutput,
     autoPlayVoiceOutput,
   })
@@ -65,7 +61,7 @@ export function ChatPanel({
               <button
                 key={session.id}
                 type="button"
-                onClick={() => setActiveSessionId(session.id)}
+                onClick={() => handleSelectSession(session.id)}
                 className={[
                   'w-full rounded-md px-3 py-2 text-left text-sm transition',
                   activeSessionId === session.id

@@ -29,6 +29,8 @@ export const LazyInterviewPage = lazy(pageLoaders.interview)
 export const LazyInterviewEndPage = lazy(pageLoaders.interviewEnd)
 
 export function preloadRoute(path: string) {
+  // Reuse the exact loader passed to React.lazy so hover/focus warms the same
+  // module promise that navigation will consume instead of downloading twice.
   const loaderKey = pathToLoader[path]
   if (!loaderKey) return
   void pageLoaders[loaderKey]()

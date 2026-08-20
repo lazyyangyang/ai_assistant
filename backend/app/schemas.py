@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
-from app.models.chat import AgentType, SessionStatus
+from app.models.chat import AgentType, MessageStatus, SessionStatus
 
 
 # ── Auth ──────────────────────────────────────────────
@@ -67,6 +67,7 @@ class ChatMessageOut(BaseModel):
     session_id: str
     role: str
     content: str
+    status: MessageStatus
     created_at: datetime
     updated_at: datetime
 

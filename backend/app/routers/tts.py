@@ -24,6 +24,8 @@ async def _synthesize_via_openai_compat(
     settings = get_settings()
 
     if settings.tts_speech_url.strip():
+        # A full URL supports vendors whose speech endpoint is not under the same
+        # OpenAI-compatible base path as chat completions.
         url = settings.tts_speech_url.strip()
     else:
         base = settings.openai_base_url.rstrip("/")
@@ -49,6 +51,8 @@ async def _synthesize_via_openai_compat(
             error_body = ""
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
+            # Bound provider text so an upstream HTML error page is not reflected
+            # wholesale into the application response.
             detail=f"语音合成失败（HTTP {resp.status_code}）：{error_body[:300]}",
         )
 
@@ -61,6 +65,7 @@ async def synthesize(
     body: TtsSynthesizeRequest,
     user: User = Depends(get_current_user),
 ):
+    """Proxy authenticated TTS requests without exposing the provider API key."""
     _ = user  # Explicitly document that auth is required.
 
     settings = get_settings()

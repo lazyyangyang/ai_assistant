@@ -37,9 +37,12 @@ export function useRootLayout() {
     })
   }, [theme, toast])
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } finally {
+      navigate('/login')
+    }
   }
 
   return {

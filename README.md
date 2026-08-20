@@ -89,8 +89,14 @@ OPENAI_BASE_URL=https://your-openai-compatible-base-url
 OPENAI_MODEL=your_model_name
 
 JWT_SECRET=replace_with_a_long_random_secret
+JWT_ACCESS_EXPIRE_MINUTES=15
+JWT_REFRESH_EXPIRE_DAYS=7
+REFRESH_COOKIE_SECURE=false
+REFRESH_COOKIE_SAMESITE=lax
 DATABASE_URL=sqlite+aiosqlite:///./ai_career.db
 ```
+
+生产环境通过 HTTPS 部署时必须将 `REFRESH_COOKIE_SECURE` 设置为 `true`。
 
 语音能力可选配置：
 
@@ -106,6 +112,8 @@ TTS_MODEL=tts-1
 
 - `POST /api/auth/register` 注册
 - `POST /api/auth/login` 登录并获取 JWT
+- `POST /api/auth/refresh` 使用 HttpOnly Refresh Cookie 续期 Access Token
+- `POST /api/auth/logout` 清除 Refresh Cookie
 - `GET /api/auth/me` 获取当前用户
 
 ### 对话与会话

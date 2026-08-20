@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -31,7 +33,16 @@ class Settings(BaseSettings):
 
     jwt_secret: str = Field(default="change-me-in-production-use-a-long-random-string")
     jwt_algorithm: str = Field(default="HS256")
-    jwt_expire_minutes: int = Field(default=1440)
+    jwt_access_expire_minutes: int = Field(default=15, gt=0)
+    jwt_refresh_expire_days: int = Field(default=7, gt=0)
+    refresh_cookie_name: str = Field(default="ai_career_refresh")
+    refresh_cookie_secure: bool = Field(default=False)
+    refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+
+    # Stream progress flushes when either bound is reached: chars caps write
+    # amplification, while time caps the partial text lost on a sudden disconnect.
+    chat_stream_persist_interval_seconds: float = Field(default=0.75, gt=0)
+    chat_stream_persist_chars: int = Field(default=256, gt=0)
 
     database_url: str = Field(
         default="sqlite+aiosqlite:///./ai_career.db",

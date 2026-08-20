@@ -18,7 +18,6 @@ export function ResumePage() {
     error,
     savedJdContext,
     latestAssistantMessage,
-    setLatestAssistantMessage,
     savingNewVersion,
     handleUpload,
     handleSetActive,
@@ -142,7 +141,6 @@ export function ResumePage() {
         agentType="resume"
         selectedResumeId={selectedResumeId}
         selectedJdContext={savedJdContext}
-        onLatestAssistantMessageChange={setLatestAssistantMessage}
         systemGreeting={t('ResumePage.systemGreeting')}
       />
     </div>

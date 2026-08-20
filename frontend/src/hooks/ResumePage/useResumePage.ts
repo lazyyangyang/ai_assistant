@@ -10,6 +10,7 @@ import {
   type ResumeDTO,
 } from '@/lib/api'
 import { loadSavedJdResult } from '@/lib/jdStorage'
+import { useChatStore } from '@/stores/chatStore'
 import type { JDStructuredResult } from '@/types/chat'
 
 export function useResumePage() {
@@ -21,7 +22,16 @@ export function useResumePage() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [savedJdContext, setSavedJdContext] = useState<JDStructuredResult | null>(null)
-  const [latestAssistantMessage, setLatestAssistantMessage] = useState('')
+  // Read the diagnosis directly from the chat domain Store. This removes a
+  // ChatPanel -> page callback whose only purpose was mirroring the same value.
+  const latestAssistantMessage = useChatStore((state) => {
+    const messages = state.messagesByAgent.resume
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index]
+      if (message.role === 'assistant' && message.content.trim()) return message.content
+    }
+    return ''
+  })
   const [savingNewVersion, setSavingNewVersion] = useState(false)
 
   const loadResumes = useCallback(async () => {
@@ -33,6 +43,8 @@ export function useResumePage() {
     }
 
     setSelectedResumeId((prev) => {
+      // Preserve the user's explicit selection across refreshes; only fall back
+      // when that version was deleted or this is the initial load.
       if (prev && list.some((item) => item.id === prev)) return prev
       const active = list.find((item) => item.is_active)
       return active?.id ?? list[0].id
@@ -44,6 +56,8 @@ export function useResumePage() {
   }, [loadResumes])
 
   useEffect(() => {
+    // Saved JD context is an explicit user choice and can be reused to align a
+    // resume diagnosis with the same target role after navigating between pages.
     setSavedJdContext(loadSavedJdResult())
   }, [])
 
@@ -142,7 +156,6 @@ export function useResumePage() {
     error,
     savedJdContext,
     latestAssistantMessage,
-    setLatestAssistantMessage,
     savingNewVersion,
     handleUpload,
     handleSetActive,

@@ -2,38 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useToast } from '@/contexts/ToastContext'
-import { useStreamChat } from '@/hooks/useStreamChat'
-import { apiGetChatSessionMessages, apiGetChatSessions, apiSynthesizeTts } from '@/lib/api'
+import { apiSynthesizeTts } from '@/lib/api'
 import { t } from '@/lib/i18n'
-import type { ChatSessionStatus, ChatSessionSummary, JDStructuredResult } from '@/types/chat'
+import { useChatStore } from '@/stores/chatStore'
+import type { AgentType, JDStructuredResult } from '@/types/chat'
 
 export interface ChatPanelProps {
   title: string
-  agentType: 'jd' | 'resume' | 'interview'
+  agentType: AgentType
   systemGreeting?: string
   selectedResumeId?: string | null
   selectedJdContext?: JDStructuredResult | null
-  onStructuredData?: (data: JDStructuredResult | null) => void
-  onLatestAssistantMessageChange?: (content: string) => void
   enableVoiceOutput?: boolean
   autoPlayVoiceOutput?: boolean
-}
-
-function mapSessionSummaries(
-  list: Awaited<ReturnType<typeof apiGetChatSessions>>,
-  agentType: ChatPanelProps['agentType'],
-) {
-  return list
-    .filter((s) => s.agent_type === agentType)
-    .map((s) => ({
-      id: s.id,
-      agentType: s.agent_type,
-      title: s.title,
-      jdContent: s.jd_content,
-      status: s.status as ChatSessionStatus,
-      feedback: s.feedback ?? null,
-      updatedAt: Date.parse(s.updated_at),
-    }))
 }
 
 export function useChatPanel({
@@ -41,39 +22,37 @@ export function useChatPanel({
   systemGreeting,
   selectedResumeId,
   selectedJdContext,
-  onStructuredData,
-  onLatestAssistantMessageChange,
   enableVoiceOutput = false,
   autoPlayVoiceOutput = true,
 }: ChatPanelProps) {
+  // 会话和消息属于跨页面聊天领域状态；输入、音频元素和虚拟列表只服务当前面板，继续局部管理。
   const { toast } = useToast()
-  const [sessions, setSessions] = useState<ChatSessionSummary[]>([])
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [input, setInput] = useState('')
   const navigate = useNavigate()
-  const latestSessionIdRef = useRef<string | null>(null)
+  const [input, setInput] = useState('')
   const viewportRef = useRef<HTMLDivElement | null>(null)
 
-  const handleSessionChange = useCallback((id: string) => {
-    latestSessionIdRef.current = id
-    setActiveSessionId(id)
-  }, [])
+  const sessions = useChatStore((state) => state.sessionsByAgent[agentType])
+  const activeSessionId = useChatStore(
+    (state) => state.activeSessionIdByAgent[agentType],
+  )
+  const messages = useChatStore((state) => state.messagesByAgent[agentType])
+  const isLoading = useChatStore((state) => state.streamingByAgent[agentType])
+  const initializeAgent = useChatStore((state) => state.initializeAgent)
+  const loadSessions = useChatStore((state) => state.loadSessions)
+  const selectSession = useChatStore((state) => state.selectSession)
+  const createNewChat = useChatStore((state) => state.createNewChat)
+  const sendMessage = useChatStore((state) => state.sendMessage)
+  const stopGeneration = useChatStore((state) => state.stopGeneration)
 
-  const { messages, isLoading, sendMessage, stopGeneration, replaceMessages, resetMessages } =
-    useStreamChat({
-      agentType,
-      systemGreeting,
-      sessionId: activeSessionId,
-      resumeId: selectedResumeId,
-      jdContext: selectedJdContext,
-      onStructuredData: (data) => onStructuredData?.(data),
-      onSessionChange: handleSessionChange,
-    })
+  useEffect(() => {
+    initializeAgent(agentType, systemGreeting)
+    loadSessions(agentType).catch(() => {})
+  }, [agentType, initializeAgent, loadSessions, systemGreeting])
 
   const latestAssistantMessage = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]
-      if (msg.role === 'assistant' && msg.content.trim()) return msg
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const message = messages[index]
+      if (message.role === 'assistant' && message.content.trim()) return message
     }
     return null
   }, [messages])
@@ -81,10 +60,11 @@ export function useChatPanel({
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null)
   const [ttsIsGenerating, setTtsIsGenerating] = useState(false)
+  // 音频 URL 与 DOM 引用不可序列化，也没有跨页面共享价值，因此不进入 Zustand。
   const ttsForMessageIdRef = useRef<string | null>(null)
   const ttsObjectUrlRef = useRef<string | null>(null)
-  const prevIsLoadingRef = useRef(isLoading)
-  const abortedRef = useRef(false)
+  const previousIsLoadingRef = useRef(isLoading)
+  const stoppedByUserRef = useRef(false)
 
   const revokeTtsUrl = useCallback(() => {
     const url = ttsObjectUrlRef.current
@@ -94,20 +74,15 @@ export function useChatPanel({
     }
   }, [])
 
-  useEffect(() => {
-    return () => {
-      revokeTtsUrl()
-    }
-  }, [revokeTtsUrl])
+  useEffect(() => revokeTtsUrl, [revokeTtsUrl])
 
   const synthesizeVoiceForMessage = useCallback(
     async (messageId: string, text: string) => {
-      if (!enableVoiceOutput) return
-      if (!text.trim()) return
+      if (!enableVoiceOutput || !text.trim()) return
       if (ttsForMessageIdRef.current === messageId && ttsObjectUrlRef.current) return
 
       setTtsIsGenerating(true)
-      abortedRef.current = false
+      stoppedByUserRef.current = false
 
       try {
         audioRef.current?.pause()
@@ -130,9 +105,9 @@ export function useChatPanel({
             })
           }, 0)
         }
-      } catch (err) {
-        const msg = (err as Error).message || t('ChatPanel.ttsFailureFallback')
-        toast({ title: t('ChatPanel.ttsFailureTitle'), message: msg, variant: 'error' })
+      } catch (error) {
+        const message = (error as Error).message || t('ChatPanel.ttsFailureFallback')
+        toast({ title: t('ChatPanel.ttsFailureTitle'), message, variant: 'error' })
       } finally {
         setTtsIsGenerating(false)
       }
@@ -142,30 +117,27 @@ export function useChatPanel({
 
   useEffect(() => {
     if (!enableVoiceOutput) {
-      prevIsLoadingRef.current = isLoading
+      previousIsLoadingRef.current = isLoading
       return
     }
 
-    const prev = prevIsLoadingRef.current
-    if (prev && !isLoading) {
-      if (abortedRef.current) {
-        abortedRef.current = false
-        prevIsLoadingRef.current = isLoading
-        return
-      }
-
-      if (latestAssistantMessage && latestAssistantMessage.content.trim()) {
-        void synthesizeVoiceForMessage(latestAssistantMessage.id, latestAssistantMessage.content)
+    // 只在 streaming: true -> false 的边沿自动播报，避免普通消息重渲染重复触发 TTS。
+    const wasLoading = previousIsLoadingRef.current
+    if (wasLoading && !isLoading) {
+      if (stoppedByUserRef.current) {
+        stoppedByUserRef.current = false
+      } else if (latestAssistantMessage?.content.trim()) {
+        void synthesizeVoiceForMessage(
+          latestAssistantMessage.id,
+          latestAssistantMessage.content,
+        )
       }
     }
-    prevIsLoadingRef.current = isLoading
+    previousIsLoadingRef.current = isLoading
   }, [enableVoiceOutput, isLoading, latestAssistantMessage, synthesizeVoiceForMessage])
 
-  const itemCount = useMemo(
-    () => messages.length + (isLoading ? 1 : 0),
-    [isLoading, messages.length],
-  )
-
+  const itemCount = messages.length + (isLoading ? 1 : 0)
+  // 虚拟列表是纯视图优化，按当前可见消息计算，不污染可复用的聊天业务 Store。
   const virtualizer = useVirtualizer({
     count: itemCount,
     getScrollElement: () => viewportRef.current,
@@ -174,114 +146,90 @@ export function useChatPanel({
   })
 
   useEffect(() => {
-    if (itemCount <= 0) return
-    virtualizer.scrollToIndex(itemCount - 1)
+    if (itemCount > 0) virtualizer.scrollToIndex(itemCount - 1)
   }, [itemCount, virtualizer])
 
-  useEffect(() => {
-    if (!onLatestAssistantMessageChange) return
-    const lastAssistant = [...messages]
-      .reverse()
-      .find((msg) => msg.role === 'assistant' && msg.content.trim())
-    onLatestAssistantMessageChange(lastAssistant?.content ?? '')
-  }, [messages, onLatestAssistantMessageChange])
-
   const activeSession = useMemo(
-    () => sessions.find((s) => s.id === activeSessionId) ?? null,
-    [sessions, activeSessionId],
+    () => sessions.find((session) => session.id === activeSessionId) ?? null,
+    [activeSessionId, sessions],
   )
   const isSessionCompleted = activeSession?.status === 'completed'
 
-  const loadSessions = useCallback(async () => {
-    const list = await apiGetChatSessions()
-    setSessions(mapSessionSummaries(list, agentType))
-  }, [agentType])
-
-  useEffect(() => {
-    loadSessions().catch(() => {})
-  }, [loadSessions])
-
-  useEffect(() => {
-    if (!activeSessionId) {
-      resetMessages()
-      onStructuredData?.(null)
-      return
-    }
-    if (isLoading) return
-
-    apiGetChatSessionMessages(activeSessionId)
-      .then((history) => {
-        replaceMessages(
-          history.map((msg) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            createdAt: Date.parse(msg.created_at),
-          })),
-        )
-      })
-      .catch(() => {})
-
-    if (agentType === 'jd') {
-      const selected = sessions.find((item) => item.id === activeSessionId)
-      if (selected?.jdContent) {
-        try {
-          onStructuredData?.(JSON.parse(selected.jdContent) as JDStructuredResult)
-        } catch {
-          onStructuredData?.(null)
-        }
-      } else {
-        onStructuredData?.(null)
-      }
-    }
-  }, [activeSessionId, agentType, isLoading, onStructuredData, replaceMessages, resetMessages, sessions])
+  const handleSelectSession = useCallback(
+    (sessionId: string) => {
+      selectSession(agentType, sessionId).catch(() => {})
+    },
+    [agentType, selectSession],
+  )
 
   const handleSend = useCallback(async () => {
-    const text = input.trim()
-    if (!text) return
+    const content = input.trim()
+    if (!content) return
     setInput('')
-    await sendMessage(text)
-    loadSessions().catch(() => {})
-  }, [input, loadSessions, sendMessage])
+    await sendMessage({
+      agentType,
+      content,
+      resumeId: selectedResumeId,
+      jdContext: selectedJdContext,
+    })
+  }, [agentType, input, selectedJdContext, selectedResumeId, sendMessage])
 
   const handleNewChat = useCallback(() => {
-    setActiveSessionId(null)
-    resetMessages()
-    onStructuredData?.(null)
-  }, [onStructuredData, resetMessages])
+    createNewChat(agentType)
+  }, [agentType, createNewChat])
 
   const handleEndInterview = useCallback(async () => {
-    if (isLoading) return
-    if (isSessionCompleted) return
+    if (isLoading || isSessionCompleted) return
     setInput('')
-    await sendMessage(t('ChatPanel.endInterview'))
-    const sid = latestSessionIdRef.current
-    if (sid) navigate(`/interview/end/${sid}`)
-  }, [isLoading, isSessionCompleted, navigate, sendMessage])
+    await sendMessage({
+      agentType,
+      content: t('ChatPanel.endInterview'),
+      resumeId: selectedResumeId,
+      jdContext: selectedJdContext,
+    })
+    // sendMessage 期间新会话 ID 才会从响应头写入 Store，完成后读取最新值再导航结束页。
+    const sessionId = useChatStore.getState().activeSessionIdByAgent[agentType]
+    if (sessionId) navigate(`/interview/end/${sessionId}`)
+  }, [
+    agentType,
+    isLoading,
+    isSessionCompleted,
+    navigate,
+    selectedJdContext,
+    selectedResumeId,
+    sendMessage,
+  ])
 
   const handleStopGeneration = useCallback(() => {
-    abortedRef.current = true
-    stopGeneration()
-  }, [stopGeneration])
+    stoppedByUserRef.current = true
+    stopGeneration(agentType)
+  }, [agentType, stopGeneration])
 
   const handlePlayVoice = useCallback(() => {
-    if (!enableVoiceOutput) return
-    if (!latestAssistantMessage) return
-    if (!latestAssistantMessage.content.trim()) return
+    if (!enableVoiceOutput || !latestAssistantMessage?.content.trim()) return
 
-    if (ttsForMessageIdRef.current !== latestAssistantMessage.id || !ttsObjectUrlRef.current) {
-      void synthesizeVoiceForMessage(latestAssistantMessage.id, latestAssistantMessage.content)
+    if (
+      ttsForMessageIdRef.current !== latestAssistantMessage.id
+      || !ttsObjectUrlRef.current
+    ) {
+      void synthesizeVoiceForMessage(
+        latestAssistantMessage.id,
+        latestAssistantMessage.content,
+      )
       return
     }
     audioRef.current?.play().catch(() => {
-      toast({ title: t('ChatPanel.playFailureTitle'), message: t('ChatPanel.playFailureMessage'), variant: 'info' })
+      toast({
+        title: t('ChatPanel.playFailureTitle'),
+        message: t('ChatPanel.playFailureMessage'),
+        variant: 'info',
+      })
     })
   }, [enableVoiceOutput, latestAssistantMessage, synthesizeVoiceForMessage, toast])
 
   return {
     sessions,
     activeSessionId,
-    setActiveSessionId,
     messages,
     isLoading,
     input,
@@ -293,6 +241,7 @@ export function useChatPanel({
     viewportRef,
     virtualizer,
     isSessionCompleted,
+    handleSelectSession,
     handleSend,
     handleNewChat,
     handleEndInterview,

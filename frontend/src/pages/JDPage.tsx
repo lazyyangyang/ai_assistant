@@ -4,7 +4,7 @@ import { useJDPage } from '@/hooks/JDPage/useJDPage'
 import { t } from '@/lib/i18n'
 
 export function JDPage() {
-  const { structured, setStructured, savedAt, canSave, handleSave } = useJDPage()
+  const { structured, savedAt, canSave, handleSave } = useJDPage()
 
   return (
     <div className="space-y-4">
@@ -57,7 +57,6 @@ export function JDPage() {
       <ChatPanel
         title={t('JDPage.chatTitle')}
         agentType="jd"
-        onStructuredData={setStructured}
         systemGreeting={t('JDPage.systemGreeting')}
       />
     </div>

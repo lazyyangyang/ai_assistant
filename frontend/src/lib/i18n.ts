@@ -150,7 +150,7 @@ const messages: Record<string, string> = {
   'ChatMessageBubble.copyRewrite': '一键复制重写内容',
   'ChatMessageBubble.copyCode': '复制代码',
 
-  'useStreamChat.requestFailure': '抱歉，请求出错了，请稍后再试。',
+  'chatStore.requestFailure': '抱歉，请求出错了，请稍后再试。',
 }
 
 export function t(key: string, params?: Record<string, string | number>) {

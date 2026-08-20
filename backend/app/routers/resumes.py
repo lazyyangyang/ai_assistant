@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 
 
 def _extract_text(file: UploadFile, raw: bytes) -> str:
+    """Extract text in memory; only normalized content, not the uploaded binary, is stored."""
     ext = Path(file.filename or "").suffix.lower()
     if ext == ".txt":
         return raw.decode("utf-8", errors="ignore").strip()
@@ -41,6 +42,7 @@ def _extract_text(file: UploadFile, raw: bytes) -> str:
 
 
 async def _ensure_single_active_resume(db: AsyncSession, user_id: str, resume_id: str) -> None:
+    """Deactivate sibling versions inside the caller's current transaction."""
     await db.execute(
         update(Resume)
         .where(Resume.user_id == user_id, Resume.id != resume_id)
@@ -83,6 +85,8 @@ async def upload_resume(
         is_active=True,
     )
     db.add(resume)
+    # Flush assigns the new UUID before the sibling update, while the later commit
+    # keeps creation and the single-active invariant atomic.
     await db.flush()
     await _ensure_single_active_resume(db, user.id, resume.id)
     await db.commit()
@@ -199,6 +203,8 @@ async def delete_resume(
     await db.flush()
 
     if was_active:
+        # Keep downstream chat defaults useful: deleting the active version
+        # promotes the newest remaining version instead of leaving no selection.
         latest = await db.execute(
             select(Resume)
             .where(Resume.user_id == user.id)
