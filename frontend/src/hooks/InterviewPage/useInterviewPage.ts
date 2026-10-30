@@ -1,29 +1,20 @@
-import { useEffect, useState } from 'react'
-import { apiGetResumes, type ResumeDTO } from '@/lib/api'
+import { useResumeSelection } from '@/hooks/useResumeSelection'
+import { useState } from 'react'
+import { useResumesData } from '@/hooks/useResumesData'
 import { loadSavedJdResult } from '@/lib/jdStorage'
 import type { JDStructuredResult } from '@/types/chat'
 
 export function useInterviewPage() {
-  const [resumes, setResumes] = useState<ResumeDTO[]>([])
-  const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
-  const [savedJdContext, setSavedJdContext] = useState<JDStructuredResult | null>(null)
+  const { resumes, loaded, error: syncError, refresh } = useResumesData()
+  const { selectedResumeId, setSelectedResumeId } = useResumeSelection(resumes, loaded)
+  const [savedJdContext] = useState<JDStructuredResult | null>(loadSavedJdResult)
 
-  useEffect(() => {
-    apiGetResumes()
-      .then((list) => {
-        setResumes(list)
-        const active = list.find((item) => item.is_active)
-        setSelectedResumeId(active?.id ?? list[0]?.id ?? null)
-      })
-      .catch(() => {})
-  }, [])
 
-  useEffect(() => {
-    setSavedJdContext(loadSavedJdResult())
-  }, [])
 
   return {
     resumes,
+    syncError,
+    refresh,
     selectedResumeId,
     setSelectedResumeId,
     savedJdContext,

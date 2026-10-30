@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, loading, phase } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -16,9 +16,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!user) {
+  if (phase === 'anonymous') {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
+  if (!user) return null
   return <>{children}</>
 }

@@ -22,7 +22,7 @@ export function useRegisterPage() {
     try {
       await register(username, email, password)
       toast({ title: t('RegisterPage.successTitle'), message: t('RegisterPage.successMessage'), variant: 'success' })
-      navigate('/')
+      navigate('/login', { replace: true })
     } catch (err) {
       const msg = (err as Error).message
       setError(msg)

@@ -20,9 +20,9 @@ AI 驱动的求职辅助平台，采用**前后端分离**架构。通过集成�
            ▼                       ▼
    ┌──────────────┐       ┌──────────────┐
    │   Database   │       │   LLM API    │
-   │ SQLite(dev)  │       │  智谱 AI     │
+   │ SQLite 当前 │       │ 可配置模型服务 │
    │ PostgreSQL   │       │ (OpenAI 兼容) │
-   │   (prod)     │       │              │
+   │   (预留)     │       │              │
    └──────────────┘       └──────────────┘
 ```
 
@@ -74,7 +74,11 @@ ai-career/
 │       │   └── AuthContext.tsx  ← 全局认证状态（login/register/logout）
 │       │
 │       ├── lib/
-│       │   ├── api.ts           ← 统一 fetch 封装（自动带 JWT Token）
+│       │   ├── api.ts           ← 业务接口封装（通过 http.ts 的 Axios 实例）
+│       │   ├── http.ts          ← Fetch 适配器、认证拦截与请求重试
+│       │   ├── authSession.ts   ← 页内认证状态机、内存 Token 与预刷新
+│       │   ├── sessionRecovery.ts ← sessionStorage sid 与重载恢复
+│       │   ├── businessEvents.ts ← 同账号跨页简历失效通知
 │       │   └── utils.ts         ← cn() 工具函数
 │       │
 │       └── types/
@@ -107,6 +111,7 @@ ai-career/
         │   ├── base.py          ← 声明式基类（id, created_at, updated_at）
         │   ├── user.py          ← 用户表
         │   ├── resume.py        ← 多版本简历表
+        │   ├── auth_session.py  ← 独立登录会话表（Refresh Token 哈希）
         │   └── chat.py          ← 对话会话 & 消息表
         │
         └── routers/             ← API 路由
@@ -119,6 +124,8 @@ ai-career/
 
 ## 三、技术栈
 
+本节于 2026-10-28 按当前代码核对。前端版本为依赖清单声明的主/次版本，完整范围见 [README 技术栈](README.md#技术栈) 与 `frontend/package.json`；后端约束以 `backend/requirements.txt` 为准，不代表实际安装版本或运行验证结果。
+
 ### 前端
 
 | 技术 | 版本 | 用途 |
@@ -128,28 +135,42 @@ ai-career/
 | Vite | 8 | 构建工具 + 开发服务器 |
 | React Router | 7 | SPA 路由 |
 | Tailwind CSS | 4 | 原子化样式 |
-| shadcn/ui | — | 组件库（基于 Radix） |
+| shadcn / Base UI | 4 / 1 | 本地 UI 组件与交互原语（当前基于 Base UI） |
+| Axios | 1 | Fetch 适配器，统一认证、上传、Blob 与 SSE 流请求 |
+| TanStack React Virtual | 3 | 聊天消息列表虚拟化 |
 | react-markdown | — | AI 回复 Markdown 渲染 |
 | rehype-highlight | — | 代码块语法高亮 |
 | lucide-react | — | 图标库 |
+
+状态使用 React Hooks / Context 与页内业务存储；BroadcastChannel 仅传递同账号简历失效通知。包管理使用 pnpm，验证工具为 ESLint、Vitest、Testing Library 与 Playwright。
 
 ### 后端
 
 | 技术 | 用途 |
 |------|------|
 | FastAPI | Web 框架（异步、高性能） |
+| Uvicorn | ASGI 服务 |
+| Pydantic | 请求与响应数据校验 |
 | LangChain + ChatOpenAI | 大模型调用 & Agent 编排 |
 | SSE-Starlette | Server-Sent Events 流式推送 |
 | SQLAlchemy 2.0 (async) | ORM（异步模式） |
 | Alembic | 数据库迁移 |
-| aiosqlite / asyncpg | 数据库驱动（开发 SQLite / 生产 PostgreSQL） |
+| aiosqlite / asyncpg | SQLite 当前默认驱动 / PostgreSQL 预留切换驱动 |
 | passlib (bcrypt) | 密码哈希 |
 | python-jose | JWT Token 签发与验证 |
 | pydantic-settings | 配置管理（读取 .env） |
+| pdfplumber / python-docx | PDF / DOCX 简历文本提取，另支持 TXT |
+| HTTPX / python-multipart | STT / TTS HTTP 调用与文件上传解析 |
+
+后端使用项目 `.venv`，测试使用 pytest / pytest-asyncio / HTTPX。语音服务通过兼容接口调用；非 WAV 音频转换依赖 FFmpeg。
 
 ---
 
 ## 四、数据库模型（ER 关系）
+
+当前阶段保留 SQLite，默认 URL 为 `sqlite+aiosqlite:///./ai_career.db`；从 `backend` 启动时对应 `backend/ai_career.db`。SQLAlchemy 使用异步引擎和 `AsyncSession`，Alembic 管理迁移。可通过 `DATABASE_URL` 配置 PostgreSQL / asyncpg，但切换、部署与并发行为须另行验证，当前不视为已在生产使用 PostgreSQL。
+
+下图与表格描述 ORM 模型，未检查日常数据库迁移状态。SQLite 的登录会话配额和简历版本写入使用短写事务保护；PostgreSQL 的用户行锁分支仍需独立联调验证。
 
 ```
 ┌─────────┐       ┌───────────┐       ┌───────────────┐       ┌──────────────┐
@@ -171,9 +192,12 @@ ai-career/
 
 ### 表说明
 
+认证关系为 `users.id → auth_sessions.user_id`（一对多）；下方表格补充上图未展示的登录会话。`auth_sessions` 与 `chat_sessions` 分别服务于登录和业务对话，不可混用。
+
 | 表 | 说明 |
 |---|------|
 | **users** | 用户主体，username/email 唯一索引 |
+| **auth_sessions** | 登录会话，关联用户，保存唯一 Refresh Token 哈希、过期时间及公共时间字段 |
 | **resumes** | 多版本简历资产，同一用户可维护多个版本（version 字段） |
 | **chat_sessions** | 对话会话，关联 agent_type（jd/resume/interview）、可选关联简历 |
 | **chat_messages** | 每轮对话消息（role: user/assistant），按时间排序 |
@@ -186,17 +210,19 @@ ai-career/
 
 | 方法 | 路径 | 说明 | 需要登录 |
 |------|------|------|---------|
-| POST | `/api/auth/register` | 注册（username, email, password） | 否 |
-| POST | `/api/auth/login` | 登录（email, password）→ JWT | 否 |
+| POST | `/api/auth/register` | 创建账号并返回用户信息，不创建登录会话 | 否 |
+| POST | `/api/auth/login` | 登录 → JWT、认证 sid 与定向 Refresh Cookie | 否 |
+| POST | `/api/auth/sessions/{sid}/refresh` | 刷新指定登录会话 | 校验定向 Cookie |
+| POST | `/api/auth/sessions/{sid}/logout` | 撤销指定登录会话 | 校验定向 Cookie |
 | GET | `/api/auth/me` | 获取当前用户信息 | 是 |
 
 ### 对话
 
 | 方法 | 路径 | 说明 | 需要登录 |
 |------|------|------|---------|
-| POST | `/api/chat/stream` | SSE 流式对话（agent_type + messages） | 否* |
+| POST | `/api/chat/stream` | SSE 流式对话（agent_type + messages） | 是 |
 
-> *后续将加入 Token 校验
+认证依赖校验 JWT、登录会话及数据归属。旧 `/api/auth/refresh`、`/api/auth/logout` 返回 410。更多业务接口见 [README API 概览](README.md#api-概览)。
 
 ### 健康检查
 
@@ -215,7 +241,7 @@ ai-career/
   │
   ▼
 前端 useStreamChat Hook
-  │  fetch POST /api/chat/stream
+  │  Axios（Fetch 适配器）POST /api/chat/stream，携带 Bearer Token
   │  body: { agent_type, messages[] }
   ▼
 FastAPI chat router
@@ -223,7 +249,7 @@ FastAPI chat router
   ▼
 LangChain ChatOpenAI.astream()
   │  system prompt (prompts.py) + 历史消息
-  │  连接智谱 AI（OpenAI 兼容接口）
+  │  连接配置的模型服务（OpenAI 兼容接口）
   ▼
 逐 token 返回 SSE:
   event: token  data: {"content": "你"}
@@ -237,19 +263,22 @@ LangChain ChatOpenAI.astream()
 ### 2. 用户认证
 
 ```
-注册/登录
-  │  POST /api/auth/register 或 /login
+注册成功 → 用户主动登录
+  │  POST /api/auth/login
   ▼
-后端验证 → 签发 JWT（HS256, 24h 有效）
+后端验证 → 创建 auth_sessions → 签发 JWT 与定向 HttpOnly Cookie
+  │  JWT 默认 15 分钟，可由配置覆盖
   │
   ▼
-前端存入 localStorage
+前端 Token 仅存页内内存，认证 sid 存入 sessionStorage
   │  后续请求自动带 Authorization: Bearer <token>
   ▼
 受保护路由（ProtectedRoute）
-  │  无 token → 跳转 /login
-  │  有 token → 调用 /api/auth/me 验证
+  │  恢复中 → 等待；未认证 → 跳转 /login
+  │  reload → sid + 定向 Cookie 刷新 → GET /api/auth/me 恢复
 ```
+
+普通新页面独立登录；退出或身份切换清理页内业务状态。数据库仅存 Refresh Token 哈希，浏览器 Cookie 保存原始 Refresh Token；跨页通知不携带凭证。完整边界见 [README 鉴权](README.md#鉴权)。
 
 ---
 
@@ -287,8 +316,7 @@ Vite 开发服务器已配置 `/api` 代理到 `http://127.0.0.1:8000`，前后�
 
 ## 九、后续规划
 
-- [ ] 对话持久化（ChatSession / ChatMessage 写入数据库）
-- [ ] 流式请求携带 JWT Token
-- [ ] 简历上传（PDF 解析 + 多版本管理）
-- [ ] 沉浸式面试引擎（Web Audio API + STT 语音采集）
-- [ ] 生产部署（PostgreSQL + Docker Compose + Nginx）
+对话持久化、流式请求鉴权、简历上传与版本管理、语音接口已有实现；实际验收范围以 `docs/verification/` 中的记录为准。
+
+- 当前继续使用 SQLite，优先完成 AI 业务联调。
+- PostgreSQL、分库分表与分布式部署后续另行评估、设计和验证。

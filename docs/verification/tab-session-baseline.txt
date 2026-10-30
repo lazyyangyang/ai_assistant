@@ -1,0 +1,40 @@
+ M README.md
+ M backend/.env.example
+ M backend/app/auth.py
+ M backend/app/config.py
+ M backend/app/deps.py
+ M backend/app/main.py
+ M backend/app/models/__init__.py
+ M backend/app/routers/auth.py
+ M backend/app/schemas.py
+ M backend/tests/conftest.py
+ M backend/tests/test_auth.py
+ M backend/tests/test_chat_stream.py
+ M backend/tests/test_interview_enhancements.py
+ M backend/tests/test_stt.py
+ M backend/tests/test_tts.py
+ M frontend/package.json
+ M frontend/pnpm-lock.yaml
+ M frontend/src/contexts/AuthContext.tsx
+ M frontend/src/hooks/RegisterPage/useRegisterPage.ts
+ M frontend/src/hooks/RootLayout/useRootLayout.ts
+ M frontend/src/hooks/useStreamChat.ts
+ M frontend/src/lib/api.ts
+ M frontend/src/lib/i18n.ts
+ M frontend/src/pages/HomePage.tsx
+?? .codex/
+?? .pnpm-store/
+?? AGENTS.md
+?? backend/alembic/versions/9d10b7a1c201_add_auth_sessions.py
+?? backend/app/models/auth_session.py
+?? backend/tests/test_auth_migration.py
+?? backend/tests/test_refresh_auth.py
+?? docs/
+?? frontend/src/hooks/RegisterPage/useRegisterPage.test.tsx
+?? frontend/src/hooks/useStreamChat.test.tsx
+?? frontend/src/lib/api.test.ts
+?? frontend/src/lib/authSession.test.ts
+?? frontend/src/lib/authSession.ts
+?? frontend/src/lib/http.ts
+?? tmp_docqa/
+?? tmp_ts_qa/

@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { FileSearch, FileText, Mic } from 'lucide-react'
 import { t } from '@/lib/i18n'
 import { preloadRoute } from '@/lib/lazyRoutes'
+import { CareerTrack } from '@/components/CareerTrack'
 
 const features = [
   {
@@ -25,9 +27,32 @@ const features = [
 ] as const
 
 export function HomePage() {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    // 仅在开发时观察首页容器；响应式布局本身由 CSS 控制。
+    if (!import.meta.env.DEV) return
+    const container = containerRef.current
+    if (!container) return
+
+    let previousWidth: number | undefined
+    const logWidth = () => {
+      // border-box 宽度，包含内边距和边框，单位为 CSS px。
+      const width = container.getBoundingClientRect().width
+      if (width === previousWidth) return
+      previousWidth = width
+      console.log('[HomePage] 首页 div 宽度:', width, 'px')
+    }
+
+    logWidth()
+    const observer = new ResizeObserver(logWidth)
+    observer.observe(container, { box: 'border-box' })
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <div className="flex flex-col items-center space-y-10 pt-8">
-      <div className="space-y-3 text-center">
+    <div ref={containerRef} className="flex flex-col items-center space-y-8 pt-8 pb-8">
+      <div className="space-y-3 px-4 text-center">
         <h1 className="text-4xl font-bold tracking-tight">
           {t('HomePage.title')}
         </h1>
@@ -36,7 +61,7 @@ export function HomePage() {
         </p>
       </div>
 
-      <div className="grid w-full max-w-2xl gap-4 sm:grid-cols-3">
+      <div className="grid w-full max-w-2xl gap-4 px-4 sm:grid-cols-3">
         {features.map(({ to, icon: Icon, title, desc }) => (
           <Link
             key={to}
@@ -55,6 +80,7 @@ export function HomePage() {
           </Link>
         ))}
       </div>
+      <CareerTrack />
     </div>
   )
 }

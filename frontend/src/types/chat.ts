@@ -13,6 +13,7 @@ export interface ChatSessionSummary {
   id: string
   agentType: AgentType
   title: string
+  resumeId?: string | null
   jdContent?: string | null
   status: ChatSessionStatus
   feedback?: string | null

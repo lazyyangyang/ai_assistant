@@ -1,0 +1,25 @@
+{
+  "mismatches": [],
+  "disconnect": {
+    "request_id": "1a336ea5f3544c9a9d40c0bfc9c1b94b",
+    "run_id": "jd-baseline-20261030T070446Z-20d2d5",
+    "concurrency": 1,
+    "wave": "disconnect_after_5",
+    "user_id": "9210e8284218484aa0b8324f22664c2e",
+    "case_id": "jd_standard",
+    "token_count": 5,
+    "done": false,
+    "structured": false,
+    "max_gap_ms": 49.09570000017993,
+    "http_status": 200,
+    "session_id": "9bb1b845d8f147cfa1350f457aef5bf5",
+    "ttft_ms": 184.91949999588542,
+    "text_valid": false,
+    "elapsed_ms": 372.9313999938313,
+    "success": false,
+    "db_complete": false,
+    "persisted_assistant_chars": 155,
+    "persisted_structured": false,
+    "persisted_session_status": "active"
+  }
+}

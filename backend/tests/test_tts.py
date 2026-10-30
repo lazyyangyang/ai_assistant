@@ -20,7 +20,11 @@ async def test_tts_success_returns_audio(async_client, monkeypatch):
         json={"username": username, "email": email, "password": password},
     )
     assert register_resp.status_code == 201
-    token = register_resp.json()["access_token"]
+    login_resp = await async_client.post(
+        "/api/auth/login", json={"email": email, "password": password},
+    )
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
 
     import app.routers.tts as tts_router
 

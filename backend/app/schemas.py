@@ -22,7 +22,9 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    session_id: str
     token_type: str = "bearer"
+    expires_in: int
 
 
 class UserOut(BaseModel):

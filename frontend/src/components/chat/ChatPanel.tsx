@@ -19,7 +19,12 @@ export function ChatPanel({
   autoPlayVoiceOutput = true,
 }: ChatPanelProps) {
   const {
+    runStatus,
+    jdMode,
+    setJdMode,
     sessions,
+    canSend,
+    contextInvalid,
     activeSessionId,
     setActiveSessionId,
     messages,
@@ -89,6 +94,12 @@ export function ChatPanel({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 px-4 py-3">
           <h2 className="text-base font-medium">{title}</h2>
+          {runStatus && <span role="status" className="text-sm text-muted-foreground">{runStatus}</span>}
+          {jdMode && activeSessionId && <select aria-label="JD 消息类型" value={jdMode} disabled={isLoading}
+            onChange={event => setJdMode(event.target.value as 'followup' | 'update')}>
+            <option value="followup">追问当前 JD</option>
+            <option value="update">更新 JD 信息</option>
+          </select>}
         </div>
         <Separator />
 
@@ -132,6 +143,7 @@ export function ChatPanel({
         </ScrollArea>
 
         <Separator />
+        {contextInvalid && <p role="alert">当前会话的简历已删除。请选择简历并点击新建会话，已有聊天保留。</p>}
 
         <div className="flex items-end gap-2 px-4 py-3">
           <div className="flex-1">
@@ -142,7 +154,7 @@ export function ChatPanel({
                 handleSend().catch(() => {})
               }}
               enableVoiceInput={agentType === 'interview'}
-              disabled={isLoading || isSessionCompleted}
+              disabled={isLoading || isSessionCompleted || !canSend}
             />
           </div>
 
@@ -168,7 +180,7 @@ export function ChatPanel({
               onClick={() => {
                 handleEndInterview().catch(() => {})
               }}
-              disabled={isLoading}
+              disabled={isLoading || !canSend}
               className="shrink-0"
             >
               {t('ChatPanel.endInterview')}

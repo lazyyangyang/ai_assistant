@@ -1,10 +1,10 @@
 import { Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { RootLayout } from './layouts/RootLayout'
-import { ProtectedRoute } from './components/ProtectedRoute'
+import { AuthenticatedWorkspace } from './components/AuthenticatedWorkspace'
 import { Skeleton } from './components/ui/Skeleton'
+import { HomePage } from './pages/HomePage'
 import {
-  LazyHomePage,
   LazyInterviewEndPage,
   LazyInterviewPage,
   LazyJDPage,
@@ -28,41 +28,15 @@ export default function App() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route element={<RootLayout />}>
-          <Route index element={<LazyHomePage />} />
+          <Route index element={<HomePage />} />
           <Route path="login" element={<LazyLoginPage />} />
           <Route path="register" element={<LazyRegisterPage />} />
-          <Route
-            path="jd"
-            element={
-              <ProtectedRoute>
-                <LazyJDPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="resume"
-            element={
-              <ProtectedRoute>
-                <LazyResumePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="interview"
-            element={
-              <ProtectedRoute>
-                <LazyInterviewPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="interview/end/:sessionId"
-            element={
-              <ProtectedRoute>
-                <LazyInterviewEndPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route element={<AuthenticatedWorkspace />}>
+            <Route path="jd" element={<LazyJDPage />} />
+            <Route path="resume" element={<LazyResumePage />} />
+            <Route path="interview" element={<LazyInterviewPage />} />
+            <Route path="interview/end/:sessionId" element={<LazyInterviewEndPage />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

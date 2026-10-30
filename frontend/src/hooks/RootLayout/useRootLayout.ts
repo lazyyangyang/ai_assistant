@@ -5,7 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { t } from '@/lib/i18n'
 
 export function useRootLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, phase } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
   const [navOpen, setNavOpen] = useState(false)
@@ -37,13 +37,18 @@ export function useRootLayout() {
     })
   }, [theme, toast])
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
+  const handleLogout = async () => {
+    try {
+      await logout()
+      navigate('/login')
+    } catch (error) {
+      toast({ title: '退出结果未确认', message: (error as Error).message, variant: 'error' })
+    }
   }
 
   return {
     user,
+    logoutPending: phase === 'loggingOut',
     navOpen,
     theme,
     toggleNav,

@@ -6,7 +6,8 @@ from pathlib import Path
 import pdfplumber
 from docx import Document
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, update, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -40,6 +41,22 @@ def _extract_text(file: UploadFile, raw: bytes) -> str:
     )
 
 
+async def _begin_resume_write(db: AsyncSession, user: User) -> str:
+    user_id = user.id
+    await db.rollback()
+    try:
+        if db.bind.dialect.name == 'sqlite':
+            await db.execute(text('BEGIN IMMEDIATE'))
+        elif db.bind.dialect.name == 'postgresql':
+            await db.execute(select(User).where(User.id == user_id).with_for_update())
+        else:
+            raise HTTPException(503, '当前数据库不支持简历写入事务')
+    except OperationalError as exc:
+        await db.rollback()
+        raise HTTPException(503, '简历服务忙，请稍后重试') from exc
+    return user_id
+
+
 async def _ensure_single_active_resume(db: AsyncSession, user_id: str, resume_id: str) -> None:
     await db.execute(
         update(Resume)
@@ -69,14 +86,15 @@ async def upload_resume(
             detail="未解析到可用文本内容",
         )
 
+    user_id = await _begin_resume_write(db, user)
     result = await db.execute(
-        select(func.max(Resume.version)).where(Resume.user_id == user.id)
+        select(func.max(Resume.version)).where(Resume.user_id == user_id)
     )
     latest_version = result.scalar_one_or_none() or 0
     next_version = latest_version + 1
 
     resume = Resume(
-        user_id=user.id,
+        user_id=user_id,
         version=next_version,
         title=(title or file.filename or f"简历 v{next_version}")[:128],
         content=content,
@@ -84,7 +102,7 @@ async def upload_resume(
     )
     db.add(resume)
     await db.flush()
-    await _ensure_single_active_resume(db, user.id, resume.id)
+    await _ensure_single_active_resume(db, user_id, resume.id)
     await db.commit()
     await db.refresh(resume)
     return resume
@@ -96,14 +114,15 @@ async def create_resume_version(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    user_id = await _begin_resume_write(db, user)
     result = await db.execute(
-        select(func.max(Resume.version)).where(Resume.user_id == user.id)
+        select(func.max(Resume.version)).where(Resume.user_id == user_id)
     )
     latest_version = result.scalar_one_or_none() or 0
     next_version = latest_version + 1
 
     resume = Resume(
-        user_id=user.id,
+        user_id=user_id,
         version=next_version,
         title=body.title.strip()[:128],
         content=body.content.strip(),
@@ -112,7 +131,7 @@ async def create_resume_version(
     db.add(resume)
     await db.flush()
     if body.is_active:
-        await _ensure_single_active_resume(db, user.id, resume.id)
+        await _ensure_single_active_resume(db, user_id, resume.id)
     await db.commit()
     await db.refresh(resume)
     return resume
@@ -156,8 +175,9 @@ async def update_resume(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    user_id = await _begin_resume_write(db, user)
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
     )
     resume = result.scalar_one_or_none()
     if resume is None:
@@ -171,7 +191,7 @@ async def update_resume(
     if body.is_active is not None:
         resume.is_active = body.is_active
         if body.is_active:
-            await _ensure_single_active_resume(db, user.id, resume.id)
+            await _ensure_single_active_resume(db, user_id, resume.id)
 
     await db.commit()
     await db.refresh(resume)
@@ -184,8 +204,9 @@ async def delete_resume(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    user_id = await _begin_resume_write(db, user)
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user_id)
     )
     resume = result.scalar_one_or_none()
     if resume is None:
@@ -201,7 +222,7 @@ async def delete_resume(
     if was_active:
         latest = await db.execute(
             select(Resume)
-            .where(Resume.user_id == user.id)
+            .where(Resume.user_id == user_id)
             .order_by(Resume.version.desc())
             .limit(1)
         )

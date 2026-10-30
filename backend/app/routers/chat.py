@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.agents import extract_interview_feedback, extract_jd_structured, stream_agent_response
+from app.agents import extract_interview_feedback, stream_agent_response
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.chat import AgentType, ChatMessage, ChatSession, SessionStatus
@@ -194,16 +194,6 @@ async def _event_generator(
         await db.rollback()
         raise
 
-    if req.agent_type == "jd" and user_content:
-        structured = await extract_jd_structured(user_content)
-        session.jd_content = json.dumps(structured, ensure_ascii=False)
-        session.updated_at = datetime.now(timezone.utc)
-        await db.commit()
-        yield {
-            "event": "structured",
-            "data": json.dumps(structured, ensure_ascii=False),
-        }
-
     yield {"event": "done", "data": "[DONE]"}
 
 
@@ -213,6 +203,8 @@ async def chat_stream(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if req.agent_type == 'jd':
+        raise HTTPException(410, 'JD 已启用异步任务，请升级客户端并使用 /api/chat/runs')
     resume_context: str | None = None
     if req.resume_id:
         resume_result = await db.execute(

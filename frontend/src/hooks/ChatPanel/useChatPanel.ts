@@ -1,8 +1,14 @@
+import axios from 'axios'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { useResumesData } from '@/hooks/useResumesData'
+import { authSession } from '@/lib/authSession'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useToast } from '@/contexts/ToastContext'
 import { useStreamChat } from '@/hooks/useStreamChat'
+import { useJDRun } from '@/hooks/useJDRun'
+import { rememberedJDSession, rememberJDSession } from '@/lib/jdRuns'
 import { apiGetChatSessionMessages, apiGetChatSessions, apiSynthesizeTts } from '@/lib/api'
 import { t } from '@/lib/i18n'
 import type { ChatSessionStatus, ChatSessionSummary, JDStructuredResult } from '@/types/chat'
@@ -30,6 +36,7 @@ function mapSessionSummaries(
       agentType: s.agent_type,
       title: s.title,
       jdContent: s.jd_content,
+      resumeId: s.resume_id,
       status: s.status as ChatSessionStatus,
       feedback: s.feedback ?? null,
       updatedAt: Date.parse(s.updated_at),
@@ -47,8 +54,18 @@ export function useChatPanel({
   autoPlayVoiceOutput = true,
 }: ChatPanelProps) {
   const { toast } = useToast()
+  const begin = useOperationGuard()
+  const { resumes, loaded: resumesLoaded } = useResumesData()
+  const [contextResumeId, setContextResumeId] = useState<string | null>(selectedResumeId ?? null)
+  const [contextStarted, setContextStarted] = useState(false)
+  const contextInvalid = agentType !== 'jd' && contextStarted && !!contextResumeId && resumesLoaded
+    && !resumes.some(resume => resume.id === contextResumeId)
+  const canSend = authSession.canRequest() && !contextInvalid
+  const historySequence = useRef(0)
+  const ttsSequence = useRef(0)
+  const playbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([])
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(() => agentType === 'jd' ? rememberedJDSession() : null)
   const [input, setInput] = useState('')
   const navigate = useNavigate()
   const latestSessionIdRef = useRef<string | null>(null)
@@ -59,16 +76,20 @@ export function useChatPanel({
     setActiveSessionId(id)
   }, [])
 
-  const { messages, isLoading, sendMessage, stopGeneration, replaceMessages, resetMessages } =
+  const streamChat =
     useStreamChat({
-      agentType,
+      agentType: agentType === 'jd' ? null : agentType,
       systemGreeting,
       sessionId: activeSessionId,
-      resumeId: selectedResumeId,
+      resumeId: contextStarted ? contextResumeId : selectedResumeId,
       jdContext: selectedJdContext,
-      onStructuredData: (data) => onStructuredData?.(data),
       onSessionChange: handleSessionChange,
     })
+
+  const isJDChat = agentType === 'jd'
+  useEffect(() => { if (isJDChat) rememberJDSession(activeSessionId) }, [isJDChat, activeSessionId])
+  const jdChat = useJDRun(isJDChat, activeSessionId, handleSessionChange, data => onStructuredData?.(data))
+  const { messages, isLoading, sendMessage, stopGeneration, replaceMessages, resetMessages } = isJDChat ? jdChat : streamChat
 
   const latestAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -95,17 +116,28 @@ export function useChatPanel({
   }, [])
 
   useEffect(() => {
-    return () => {
+    const stop = () => {
+      ttsSequence.current++
+      abortedRef.current = true
+      clearTimeout(playbackTimer.current)
+      audioRef.current?.pause()
       revokeTtsUrl()
+      setTtsAudioUrl(null)
+      setTtsIsGenerating(false)
     }
+    const unsubscribe = authSession.subscribe(() => { if (!authSession.canRequest()) stop() })
+    return () => { unsubscribe(); stop() }
   }, [revokeTtsUrl])
 
   const synthesizeVoiceForMessage = useCallback(
     async (messageId: string, text: string) => {
-      if (!enableVoiceOutput) return
+      if (!enableVoiceOutput || !authSession.canRequest()) return
       if (!text.trim()) return
       if (ttsForMessageIdRef.current === messageId && ttsObjectUrlRef.current) return
 
+      const operation = begin()
+      const sequence = ++ttsSequence.current
+      const current = () => operation.current() && sequence === ttsSequence.current
       setTtsIsGenerating(true)
       abortedRef.current = false
 
@@ -113,15 +145,18 @@ export function useChatPanel({
         audioRef.current?.pause()
         revokeTtsUrl()
 
-        const blob = await apiSynthesizeTts(text)
+        const blob = await apiSynthesizeTts(text, { signal: operation.signal })
+        if (!current()) return
         const url = URL.createObjectURL(blob)
         ttsObjectUrlRef.current = url
         ttsForMessageIdRef.current = messageId
         setTtsAudioUrl(url)
 
         if (autoPlayVoiceOutput) {
-          window.setTimeout(() => {
+          playbackTimer.current = setTimeout(() => {
+            if (!current()) return
             audioRef.current?.play().catch(() => {
+              if (!current()) return
               toast({
                 title: t('ChatPanel.autoplayBlockedTitle'),
                 message: t('ChatPanel.autoplayBlockedMessage'),
@@ -131,13 +166,15 @@ export function useChatPanel({
           }, 0)
         }
       } catch (err) {
+        if (!current() || axios.isCancel(err)) return
         const msg = (err as Error).message || t('ChatPanel.ttsFailureFallback')
         toast({ title: t('ChatPanel.ttsFailureTitle'), message: msg, variant: 'error' })
       } finally {
-        setTtsIsGenerating(false)
+        if (current()) setTtsIsGenerating(false)
+        operation.release()
       }
     },
-    [autoPlayVoiceOutput, enableVoiceOutput, revokeTtsUrl, toast],
+    [autoPlayVoiceOutput, enableVoiceOutput, revokeTtsUrl, toast, begin],
   )
 
   useEffect(() => {
@@ -147,7 +184,7 @@ export function useChatPanel({
     }
 
     const prev = prevIsLoadingRef.current
-    if (prev && !isLoading) {
+    if (prev && !isLoading && authSession.canRequest()) {
       if (abortedRef.current) {
         abortedRef.current = false
         prevIsLoadingRef.current = isLoading
@@ -193,24 +230,30 @@ export function useChatPanel({
   const isSessionCompleted = activeSession?.status === 'completed'
 
   const loadSessions = useCallback(async () => {
-    const list = await apiGetChatSessions()
-    setSessions(mapSessionSummaries(list, agentType))
-  }, [agentType])
+    const operation = begin()
+    try {
+      const list = await apiGetChatSessions({ signal: operation.signal })
+      if (operation.current()) setSessions(mapSessionSummaries(list, agentType))
+    } finally { operation.release() }
+  }, [agentType, begin])
 
   useEffect(() => {
     loadSessions().catch(() => {})
   }, [loadSessions])
 
   useEffect(() => {
+    if (isLoading) return
     if (!activeSessionId) {
       resetMessages()
       onStructuredData?.(null)
       return
     }
-    if (isLoading) return
 
-    apiGetChatSessionMessages(activeSessionId)
+    const operation = begin()
+    const sequence = ++historySequence.current
+    apiGetChatSessionMessages(activeSessionId, { signal: operation.signal })
       .then((history) => {
+        if (!operation.current() || sequence !== historySequence.current) return
         replaceMessages(
           history.map((msg) => ({
             id: msg.id,
@@ -221,6 +264,7 @@ export function useChatPanel({
         )
       })
       .catch(() => {})
+      .finally(operation.release)
 
     if (agentType === 'jd') {
       const selected = sessions.find((item) => item.id === activeSessionId)
@@ -234,30 +278,39 @@ export function useChatPanel({
         onStructuredData?.(null)
       }
     }
-  }, [activeSessionId, agentType, isLoading, onStructuredData, replaceMessages, resetMessages, sessions])
+    return () => { historySequence.current = sequence + 1 }
+  }, [activeSessionId, agentType, isLoading, onStructuredData, replaceMessages, resetMessages, sessions, begin])
 
   const handleSend = useCallback(async () => {
     const text = input.trim()
-    if (!text) return
+    if (!text || !canSend) return
+    if (!contextStarted) { setContextStarted(true); setContextResumeId(selectedResumeId ?? null) }
     setInput('')
     await sendMessage(text)
     loadSessions().catch(() => {})
-  }, [input, loadSessions, sendMessage])
+  }, [input, loadSessions, sendMessage, canSend, contextStarted, selectedResumeId])
 
   const handleNewChat = useCallback(() => {
+    if (!isJDChat) stopGeneration()
+    historySequence.current++
+    setContextResumeId(selectedResumeId ?? null)
+    setContextStarted(false)
     setActiveSessionId(null)
+    latestSessionIdRef.current = null
     resetMessages()
     onStructuredData?.(null)
-  }, [onStructuredData, resetMessages])
+  }, [onStructuredData, resetMessages, stopGeneration, selectedResumeId, isJDChat])
 
   const handleEndInterview = useCallback(async () => {
-    if (isLoading) return
+    if (isLoading || !canSend) return
+    const operation = begin()
     if (isSessionCompleted) return
     setInput('')
     await sendMessage(t('ChatPanel.endInterview'))
     const sid = latestSessionIdRef.current
-    if (sid) navigate(`/interview/end/${sid}`)
-  }, [isLoading, isSessionCompleted, navigate, sendMessage])
+    if (sid && operation.current()) navigate(`/interview/end/${sid}`)
+    operation.release()
+  }, [isLoading, isSessionCompleted, navigate, sendMessage, canSend, begin])
 
   const handleStopGeneration = useCallback(() => {
     abortedRef.current = true
@@ -279,9 +332,22 @@ export function useChatPanel({
   }, [enableVoiceOutput, latestAssistantMessage, synthesizeVoiceForMessage, toast])
 
   return {
+    runStatus: isJDChat ? jdChat.runStatus : '',
+    jdMode: isJDChat ? jdChat.mode : null,
+    setJdMode: jdChat.setMode,
     sessions,
     activeSessionId,
-    setActiveSessionId,
+    setActiveSessionId: (id: string) => {
+      if (isJDChat) resetMessages()
+      else stopGeneration()
+      historySequence.current++
+      setContextStarted(true)
+      setContextResumeId(sessions.find(session => session.id === id)?.resumeId ?? null)
+      latestSessionIdRef.current = id
+      setActiveSessionId(id)
+    },
+    canSend,
+    contextInvalid,
     messages,
     isLoading,
     input,

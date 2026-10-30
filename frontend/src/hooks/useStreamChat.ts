@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
+import { authSession } from '@/lib/authSession'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
-import { getAccessToken } from '@/lib/api'
+import axios from 'axios'
+import { apiStreamChat } from '@/lib/api'
 import { t } from '@/lib/i18n'
 import type { AgentType, ChatMessage, JDStructuredResult } from '@/types/chat'
 
@@ -11,12 +12,11 @@ function genId() {
 }
 
 interface UseStreamChatOptions {
-  agentType: AgentType
+  agentType: Exclude<AgentType, 'jd'> | null
   systemGreeting?: string
   sessionId?: string | null
   resumeId?: string | null
   jdContext?: JDStructuredResult | null
-  onStructuredData?: (data: JDStructuredResult) => void
   onSessionChange?: (sessionId: string) => void
 }
 
@@ -38,17 +38,24 @@ export function useStreamChat({
   sessionId,
   resumeId,
   jdContext,
-  onStructuredData,
   onSessionChange,
 }: UseStreamChatOptions) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { logout } = useAuth()
   const [messages, setMessages] = useState<ChatMessage[]>(() => buildGreeting(systemGreeting))
   const [isLoading, setIsLoading] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
+  const operationSequence = useRef(0)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; abortRef.current?.abort() }
+  }, [])
+
   const resetMessages = useCallback(() => {
+    operationSequence.current++
+    abortRef.current?.abort()
     setMessages(buildGreeting(systemGreeting))
   }, [systemGreeting])
 
@@ -58,7 +65,10 @@ export function useStreamChat({
 
   const sendMessage = useCallback(
     async (userText: string) => {
-      if (!userText.trim() || isLoading) return
+      if (!agentType || !userText.trim() || isLoading || abortRef.current || !authSession.canRequest()) return
+      const sequence = ++operationSequence.current
+      const identity = authSession.captureIdentity()
+      const current = () => mounted.current && sequence === operationSequence.current && authSession.isCurrent(identity)
 
       const userMsg: ChatMessage = {
         id: genId(),
@@ -82,8 +92,10 @@ export function useStreamChat({
       const THROTTLE_MS = 30
       let assistantContent = ''
       let lastCommitAt = 0
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
 
       const commitAssistantContent = () => {
+        if (!current()) return
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId ? { ...m, content: assistantContent } : m,
@@ -98,50 +110,28 @@ export function useStreamChat({
           .filter((m) => m.content !== systemGreeting)
           .map((m) => ({ role: m.role, content: m.content }))
 
-        const token = getAccessToken()
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (token) {
-          headers.Authorization = `Bearer ${token}`
-        }
+        const res = await apiStreamChat({
+          agent_type: agentType,
+          messages: historyForApi,
+          session_id: sessionId ?? undefined,
+          resume_id: resumeId ?? undefined,
+          jd_context: jdContext ?? undefined,
+        }, controller.signal)
 
-        const res = await fetch('/api/chat/stream', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            agent_type: agentType,
-            messages: historyForApi,
-            session_id: sessionId ?? undefined,
-            resume_id: resumeId ?? undefined,
-            jd_context: jdContext ?? undefined,
-          }),
-          signal: controller.signal,
-        })
-
-        const returnedSessionId = res.headers.get('x-session-id')
-        if (returnedSessionId) {
+        if (!current()) { await res.data.cancel(); return }
+        const returnedSessionId = res.headers['x-session-id']
+        if (typeof returnedSessionId === 'string') {
           onSessionChange?.(returnedSessionId)
         }
 
-        if (res.status === 401) {
-          logout()
-          setMessages((prev) => prev.filter((m) => m.id !== assistantMsgId))
-          navigate('/login', { replace: true, state: { from: location } })
-          return
-        }
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`)
-        }
-
-        const reader = res.body?.getReader()
-        if (!reader) throw new Error('No readable stream')
-
+        reader = res.data.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
         let eventType = 'token'
 
         while (true) {
           const { done, value } = await reader.read()
+          if (!current()) { await reader.cancel(); return }
           if (done) break
 
           buffer += decoder.decode(value, { stream: true })
@@ -155,7 +145,11 @@ export function useStreamChat({
             }
             if (line.startsWith('data: ')) {
               const raw = line.slice(6)
-              if (raw === '[DONE]' || eventType === 'done') break
+              if (raw.trim() === '[DONE]' || eventType === 'done') {
+                await reader.cancel()
+                if (assistantContent) commitAssistantContent()
+                return
+              }
               try {
                 if (eventType === 'token') {
                   const parsed = JSON.parse(raw) as { content: string }
@@ -165,10 +159,6 @@ export function useStreamChat({
                   if (!lastCommitAt || now - lastCommitAt >= THROTTLE_MS) {
                     commitAssistantContent()
                   }
-                }
-                if (eventType === 'structured') {
-                  const parsed = JSON.parse(raw) as JDStructuredResult
-                  onStructuredData?.(parsed)
                 }
               } catch {
                 // skip malformed JSON
@@ -182,25 +172,36 @@ export function useStreamChat({
           commitAssistantContent()
         }
       } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
+        if (!current()) return
+        if (axios.isAxiosError(err) && err.response?.status === 401) {
+          setMessages((prev) => prev.filter((m) => m.id !== assistantMsgId))
+          navigate('/login', { replace: true, state: { from: location } })
+          return
+        }
+        if (!controller.signal.aborted && !axios.isCancel(err) && (err as Error).name !== 'AbortError') {
           assistantContent =
             assistantContent || t('useStreamChat.requestFailure')
           commitAssistantContent()
         }
       } finally {
-        setIsLoading(false)
-        abortRef.current = null
+        if (reader) {
+          try { await reader.cancel() } catch { /* Stream may already be closed. */ }
+          reader.releaseLock()
+        }
+        if (controller.signal.aborted && assistantContent) commitAssistantContent()
+        if (abortRef.current === controller) {
+          if (mounted.current) setIsLoading(false)
+          abortRef.current = null
+        }
       }
     },
     [
       agentType,
       isLoading,
       location,
-      logout,
       messages,
       navigate,
       onSessionChange,
-      onStructuredData,
       sessionId,
       resumeId,
       jdContext,

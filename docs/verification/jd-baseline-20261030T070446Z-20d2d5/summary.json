@@ -1,0 +1,187 @@
+[
+  {
+    "concurrency": 1,
+    "requests": 3,
+    "successful": 3,
+    "wall_seconds": 6.688,
+    "successful_per_minute": 26.91,
+    "process_cpu_seconds": 0.797,
+    "ttft_ms": {
+      "p50": 187.25,
+      "p95": 187.31,
+      "p99": 187.31,
+      "max": 187.31,
+      "n": 3
+    },
+    "elapsed_ms": {
+      "p50": 2224.68,
+      "p95": 2239.16,
+      "p99": 2239.16,
+      "max": 2239.16,
+      "n": 3
+    },
+    "max_gap_ms": {
+      "p50": 51.99,
+      "p95": 53.26,
+      "p99": 53.26,
+      "max": 53.26,
+      "n": 3
+    },
+    "commit_ms": {
+      "p50": 10.13,
+      "p95": 13.6,
+      "p99": 15.71,
+      "max": 16.32,
+      "n": 132
+    },
+    "failed_commits": 0
+  },
+  {
+    "concurrency": 5,
+    "requests": 15,
+    "successful": 15,
+    "wall_seconds": 11.203,
+    "successful_per_minute": 80.33,
+    "process_cpu_seconds": 2.281,
+    "ttft_ms": {
+      "p50": 286.16,
+      "p95": 647.67,
+      "p99": 647.67,
+      "max": 647.67,
+      "n": 15
+    },
+    "elapsed_ms": {
+      "p50": 3334.92,
+      "p95": 3885.89,
+      "p99": 3885.89,
+      "max": 3885.89,
+      "n": 15
+    },
+    "max_gap_ms": {
+      "p50": 268.78,
+      "p95": 1225.22,
+      "p99": 1225.22,
+      "max": 1225.22,
+      "n": 15
+    },
+    "commit_ms": {
+      "p50": 11.66,
+      "p95": 150.81,
+      "p99": 273.75,
+      "max": 1198.82,
+      "n": 660
+    },
+    "failed_commits": 0
+  },
+  {
+    "concurrency": 10,
+    "requests": 30,
+    "successful": 30,
+    "wall_seconds": 21.485,
+    "successful_per_minute": 83.78,
+    "process_cpu_seconds": 6.109,
+    "ttft_ms": {
+      "p50": 526.37,
+      "p95": 3987.94,
+      "p99": 5018.82,
+      "max": 5018.82,
+      "n": 30
+    },
+    "elapsed_ms": {
+      "p50": 5678.27,
+      "p95": 7149.35,
+      "p99": 7372.42,
+      "max": 7372.42,
+      "n": 30
+    },
+    "max_gap_ms": {
+      "p50": 950.45,
+      "p95": 2351.4,
+      "p99": 4141.76,
+      "max": 4141.76,
+      "n": 30
+    },
+    "commit_ms": {
+      "p50": 11.61,
+      "p95": 318.62,
+      "p99": 1527.49,
+      "max": 4399.88,
+      "n": 1320
+    },
+    "failed_commits": 0
+  },
+  {
+    "concurrency": 20,
+    "requests": 60,
+    "successful": 56,
+    "wall_seconds": 33.928,
+    "successful_per_minute": 99.03,
+    "process_cpu_seconds": 12.078,
+    "ttft_ms": {
+      "p50": 1550.18,
+      "p95": 5585.92,
+      "p99": 8877.89,
+      "max": 8877.89,
+      "n": 57
+    },
+    "elapsed_ms": {
+      "p50": 8441.79,
+      "p95": 11430.31,
+      "p99": 12061.34,
+      "max": 12061.34,
+      "n": 60
+    },
+    "max_gap_ms": {
+      "p50": 1806.05,
+      "p95": 4858.03,
+      "p99": 6712.09,
+      "max": 6712.09,
+      "n": 60
+    },
+    "commit_ms": {
+      "p50": 25.95,
+      "p95": 492.32,
+      "p99": 3559.1,
+      "max": 6772.33,
+      "n": 2489
+    },
+    "failed_commits": 4
+  },
+  {
+    "concurrency": 40,
+    "requests": 120,
+    "successful": 92,
+    "wall_seconds": 49.907,
+    "successful_per_minute": 110.61,
+    "process_cpu_seconds": 21.797,
+    "ttft_ms": {
+      "p50": 1492.01,
+      "p95": 5107.85,
+      "p99": 10714.52,
+      "max": 11003.95,
+      "n": 109
+    },
+    "elapsed_ms": {
+      "p50": 13479.34,
+      "p95": 16034.95,
+      "p99": 16789.64,
+      "max": 17110.52,
+      "n": 120
+    },
+    "max_gap_ms": {
+      "p50": 1059.97,
+      "p95": 5647.01,
+      "p99": 6831.19,
+      "max": 7046.47,
+      "n": 120
+    },
+    "commit_ms": {
+      "p50": 208.32,
+      "p95": 527.85,
+      "p99": 5242.35,
+      "max": 7197.82,
+      "n": 4355
+    },
+    "failed_commits": 28
+  }
+]

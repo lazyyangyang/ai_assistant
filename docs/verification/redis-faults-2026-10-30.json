@@ -1,0 +1,18 @@
+{
+  "database": "C:\\Users\\Jiajun Eleen\\Documents\\ChatGPT\\Ai求职助手项目\\.local\\redis-validation\\38197f23f2844b3dadb77e406c2c5a9a\\test.db",
+  "model": "deterministic 220 chunks, 20ms/chunk",
+  "scenarios": [],
+  "checks": {
+    "admission": "16 identical -> 1 run; same session 8 -> 1 admitted; user quota 8 -> 3 admitted",
+    "redis": "attempt fence, exact stream cap, active no TTL, terminal TTL passed",
+    "cancel_seconds": 1.629,
+    "redis_outage": {
+      "status": "failed",
+      "error_code": "analysis_failed",
+      "partial_characters_saved": 70,
+      "settled_seconds": 13.419
+    }
+  },
+  "redis_version": "7.4.11",
+  "passed": true
+}

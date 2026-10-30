@@ -19,7 +19,11 @@ async def test_interview_end_sets_feedback_and_completed(async_client, db_sessio
         json={"username": username, "email": email, "password": password},
     )
     assert register_resp.status_code == 201
-    token = register_resp.json()["access_token"]
+    login_resp = await async_client.post(
+        "/api/auth/login", json={"email": email, "password": password},
+    )
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
 
     import app.routers.chat as chat_router
 
@@ -73,7 +77,11 @@ async def test_interview_llm_history_loaded_from_db(async_client, db_session, mo
         json={"username": username, "email": email, "password": password},
     )
     assert register_resp.status_code == 201
-    token = register_resp.json()["access_token"]
+    login_resp = await async_client.post(
+        "/api/auth/login", json={"email": email, "password": password},
+    )
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
     user_id = decode_access_token(token)
     assert user_id
 

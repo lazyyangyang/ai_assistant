@@ -1,23 +1,24 @@
+import { useOperationGuard } from '@/hooks/useOperationGuard'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiGetChatSessions } from '@/lib/api'
 import type { InterviewFeedback } from '@/types/chat'
 
 export function useInterviewEndPage() {
+  const begin = useOperationGuard()
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!!sessionId)
   const [feedback, setFeedback] = useState<InterviewFeedback | null>(null)
   const [rawFeedback, setRawFeedback] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!sessionId) {
-      setLoading(false)
-      return
-    }
+    if (!sessionId) return
 
-    apiGetChatSessions()
+    const operation = begin()
+    apiGetChatSessions({ signal: operation.signal })
       .then((list) => {
+        if (!operation.current()) return
         const session = list.find((s) => s.id === sessionId)
         if (!session?.feedback) return
 
@@ -28,8 +29,9 @@ export function useInterviewEndPage() {
           setFeedback(null)
         }
       })
-      .finally(() => setLoading(false))
-  }, [sessionId])
+      .catch(() => {})
+      .finally(() => { if (operation.current()) setLoading(false); operation.release() })
+  }, [sessionId, begin])
 
   const overallScore = useMemo(() => {
     if (!feedback) return null

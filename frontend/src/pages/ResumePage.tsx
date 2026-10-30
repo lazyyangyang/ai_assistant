@@ -16,6 +16,8 @@ export function ResumePage() {
     setFile,
     uploading,
     error,
+    syncError,
+    loadResumes,
     savedJdContext,
     latestAssistantMessage,
     setLatestAssistantMessage,
@@ -28,6 +30,7 @@ export function ResumePage() {
 
   return (
     <div className="space-y-4">
+      {syncError && <p role="alert">简历已保留，列表同步失败：{syncError} <button onClick={() => void loadResumes()}>重试同步</button></p>}
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-3">
           <h2 className="text-base font-medium">{t('ResumePage.title')}</h2>

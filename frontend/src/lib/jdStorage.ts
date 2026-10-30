@@ -1,20 +1,20 @@
 import type { JDStructuredResult } from '@/types/chat'
 
-const SAVED_JD_KEY = 'saved_jd_result'
-
+import { authSession } from './authSession'
+import type { IdentitySnapshot } from './authTypes'
+let slot: { identity: IdentitySnapshot; result: JDStructuredResult } | null = null
+const unsubscribe = authSession.subscribe(() => {
+  if (slot && (slot.identity.epoch !== authSession.getSnapshot().epoch)) slot = null
+})
+if (import.meta.hot) import.meta.hot.dispose(unsubscribe)
 export function saveJdResult(result: JDStructuredResult) {
-  localStorage.setItem(SAVED_JD_KEY, JSON.stringify(result))
+  if (!authSession.canRequest()) return
+  slot = { identity: authSession.captureIdentity(), result: structuredClone(result) }
 }
-
 export function loadSavedJdResult(): JDStructuredResult | null {
-  const raw = localStorage.getItem(SAVED_JD_KEY)
-  if (!raw) return null
-
-  try {
-    return JSON.parse(raw) as JDStructuredResult
-  } catch {
-    return null
-  }
+  if (!slot || slot.identity.epoch !== authSession.getSnapshot().epoch ||
+    slot.identity.sessionId !== authSession.getSnapshot().sessionId) return null
+  return structuredClone(slot.result)
 }
 
 export function hasMeaningfulJdResult(result: JDStructuredResult | null) {

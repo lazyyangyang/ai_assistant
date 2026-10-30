@@ -47,12 +47,12 @@ const messages: Record<string, string> = {
   'RegisterPage.loginPrompt': '已有账号？',
   'RegisterPage.loginLink': '去登录',
   'RegisterPage.successTitle': '注册成功',
-  'RegisterPage.successMessage': '账号已创建，可以开始使用',
+  'RegisterPage.successMessage': '账号已创建，请登录',
   'RegisterPage.failureTitle': '注册失败',
 
   'JDPage.resultTitle': '结构化解析结果',
   'JDPage.saveButton': '保存结果',
-  'JDPage.savedAt': '已保存：{savedAt}',
+  'JDPage.savedAt': '已保存到本标签页当前会话：{savedAt}',
   'JDPage.emptyResult': '发送 JD 后会在这里展示结构化结果卡片。',
   'JDPage.skillsTitle': '技能列表',
   'JDPage.responsibilitiesTitle': '岗位职责',
@@ -61,7 +61,7 @@ const messages: Record<string, string> = {
   'JDPage.chatTitle': 'JD 智能解析',
   'JDPage.systemGreeting': '你好！请将岗位描述（JD）粘贴到下方，我会帮你提取关键技能要求、岗位职责等结构化信息。',
   'JDPage.saveSuccessTitle': 'JD 已保存',
-  'JDPage.saveSuccessMessage': '后续简历诊断与面试将使用该 JD',
+  'JDPage.saveSuccessMessage': '已保存到本标签页当前登录会话，退出或刷新页面后清除',
 
   'ResumePage.title': '简历版本管理',
   'ResumePage.description': '支持上传 PDF / TXT / DOCX；新上传版本会自动设为当前活跃版本。',

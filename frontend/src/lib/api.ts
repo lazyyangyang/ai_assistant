@@ -1,49 +1,16 @@
-const BASE = '/api'
+import type { AxiosRequestConfig } from 'axios'
+import { http } from './http'
+import { authSession } from './authSession'
 
-let accessToken: string | null = null
+import { publicHttp } from './authTransport'
+import { publishResumeChange } from './businessEvents'
+export type { TokenResponse } from './authTypes'
+type RequestOptions = { signal?: AbortSignal }
 
-export function setAccessToken(token: string) {
-  accessToken = token
-}
-
-export function getAccessToken(): string | null {
-  return accessToken
-}
-
-export function clearAccessToken() {
-  accessToken = null
-}
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const token = getAccessToken()
-  const headers: Record<string, string> = { ...(options.headers as Record<string, string>) }
-  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
-    headers['Content-Type'] = 'application/json'
-  }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const res = await fetch(`${BASE}${path}`, { ...options, headers })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${res.status}`)
-  }
-
-  if (res.status === 204) {
-    return undefined as T
-  }
-
-  return res.json() as Promise<T>
-}
-
-export interface TokenResponse {
-  access_token: string
-  token_type: string
+async function request<T>(path: string, options: AxiosRequestConfig = {}): Promise<T> {
+  const identity = authSession.captureIdentity()
+  const response = await http.request<T>({ ...options, url: path, identity } as AxiosRequestConfig)
+  return response.status === 204 ? undefined as T : response.data
 }
 
 export interface UserInfo {
@@ -86,62 +53,59 @@ export interface ResumeDTO {
 }
 
 export async function apiRegister(username: string, email: string, password: string) {
-  return request<TokenResponse>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ username, email, password }),
-  })
+  return (await publicHttp.post<UserInfo>('/auth/register', { username, email, password })).data
 }
 
-export async function apiLogin(email: string, password: string) {
-  return request<TokenResponse>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
+export function apiLogin(email: string, password: string) {
+  return authSession.login({ email, password })
+}
+export function apiLogout() { return authSession.logout() }
+export async function apiGetMe(options: RequestOptions = {}) {
+  return request<UserInfo>('/auth/me', { ...options, timeout: 10_000, internalIdentityRead: true } as AxiosRequestConfig)
 }
 
-export async function apiGetMe() {
-  return request<UserInfo>('/auth/me')
+export async function apiGetChatSessions(options: RequestOptions = {}) {
+  return request<ChatSessionDTO[]>('/chat/sessions', options)
 }
 
-export async function apiGetChatSessions() {
-  return request<ChatSessionDTO[]>('/chat/sessions')
+export async function apiGetChatSessionMessages(sessionId: string, options: RequestOptions = {}) {
+  return request<ChatMessageDTO[]>(`/chat/sessions/${sessionId}/messages`, options)
 }
 
-export async function apiGetChatSessionMessages(sessionId: string) {
-  return request<ChatMessageDTO[]>(`/chat/sessions/${sessionId}/messages`)
-}
-
-export async function apiUploadResume(file: File, title?: string) {
+export async function apiUploadResume(file: File, title?: string, options: RequestOptions = {}) {
   const formData = new FormData()
   formData.append('file', file)
   if (title?.trim()) {
     formData.append('title', title.trim())
   }
-  return request<ResumeDTO>('/resumes/upload', {
+  return resumeWrite<ResumeDTO>('/resumes/upload', {
+    ...options,
     method: 'POST',
-    body: formData,
+    data: formData,
   })
 }
 
-export async function apiGetResumes() {
-  return request<ResumeDTO[]>('/resumes')
+export async function apiGetResumes(options: RequestOptions = {}) {
+  return request<ResumeDTO[]>('/resumes', options)
 }
 
-export async function apiGetResume(resumeId: string) {
-  return request<ResumeDTO>(`/resumes/${resumeId}`)
+export async function apiGetResume(resumeId: string, options: RequestOptions = {}) {
+  return request<ResumeDTO>(`/resumes/${resumeId}`, options)
 }
 
-export async function apiDeleteResume(resumeId: string) {
-  return request<void>(`/resumes/${resumeId}`, { method: 'DELETE' })
+export async function apiDeleteResume(resumeId: string, options: RequestOptions = {}) {
+  return resumeWrite<void>(`/resumes/${resumeId}`, { ...options, method: 'DELETE' })
 }
 
 export async function apiUpdateResume(
   resumeId: string,
   body: { title?: string; is_active?: boolean },
+  options: RequestOptions = {},
 ) {
-  return request<ResumeDTO>(`/resumes/${resumeId}`, {
+  return resumeWrite<ResumeDTO>(`/resumes/${resumeId}`, {
+    ...options,
     method: 'PATCH',
-    body: JSON.stringify(body),
+    data: body,
   })
 }
 
@@ -149,10 +113,11 @@ export async function apiCreateResumeVersion(body: {
   title: string
   content: string
   is_active?: boolean
-}) {
-  return request<ResumeDTO>('/resumes', {
+}, options: RequestOptions = {}) {
+  return resumeWrite<ResumeDTO>('/resumes', {
+    ...options,
     method: 'POST',
-    body: JSON.stringify(body),
+    data: body,
   })
 }
 
@@ -160,7 +125,7 @@ export interface TranscribeResponse {
   text: string
 }
 
-export async function apiTranscribeAudio(audio: Blob | File, language?: string) {
+export async function apiTranscribeAudio(audio: Blob | File, language?: string, options: RequestOptions = {}) {
   const formData = new FormData()
   let filename: string
   if (audio instanceof File) {
@@ -178,28 +143,41 @@ export async function apiTranscribeAudio(audio: Blob | File, language?: string) 
   }
 
   return request<TranscribeResponse>('/stt/transcribe', {
+    ...options,
     method: 'POST',
-    body: formData,
+    data: formData,
   })
 }
 
-export async function apiSynthesizeTts(text: string) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = getAccessToken()
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-
-  const res = await fetch(`${BASE}/tts/synthesize`, {
+export async function apiSynthesizeTts(text: string, options: RequestOptions = {}) {
+  return request<Blob>('/tts/synthesize', {
+    ...options,
     method: 'POST',
-    headers,
-    body: JSON.stringify({ text }),
+    data: { text },
+    responseType: 'blob',
   })
+}
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${res.status}`)
+export function apiStreamChat(data: {
+  agent_type: AgentType
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  session_id?: string
+  resume_id?: string
+  jd_context?: import('@/types/chat').JDStructuredResult
+}, signal: AbortSignal) {
+  const identity = authSession.captureIdentity()
+  return http.post<ReadableStream<Uint8Array>>('/chat/stream', data, {
+    identity,
+    responseType: 'stream',
+    signal,
+  } as AxiosRequestConfig)
+}
+
+async function resumeWrite<T>(path: string, options: AxiosRequestConfig): Promise<T> {
+  const identity = authSession.captureIdentity()
+  const result = await request<T>(path, options)
+  if (authSession.isCurrent(identity)) {
+    try { publishResumeChange(identity) } catch { /* Notification cannot reverse a committed write. */ }
   }
-
-  return res.blob()
+  return result
 }

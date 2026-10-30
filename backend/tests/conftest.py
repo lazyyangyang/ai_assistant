@@ -16,6 +16,10 @@ if BACKEND_DIR not in sys.path:
 
 TEST_DB_PATH = os.path.join(tempfile.gettempdir(), f"ai_career_test_{uuid.uuid4().hex}.db")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+os.environ["OPENAI_API_KEY"] = "test-no-external-service"
+os.environ["OPENAI_BASE_URL"] = "http://127.0.0.1:1"
+os.environ["STT_TRANSCRIBE_URL"] = "http://127.0.0.1:1/transcriptions"
+os.environ["TTS_SPEECH_URL"] = "http://127.0.0.1:1/speech"
 
 
 # Import after setting DATABASE_URL so Settings() and engine are created correctly.
@@ -47,6 +51,7 @@ async def db_session(initialized_db) -> AsyncSession:
 @pytest.fixture()
 async def async_client(initialized_db):
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(transport=transport, base_url="http://test",
+                           headers={"X-CSRF-Protection": "1"}) as client:
         yield client
 

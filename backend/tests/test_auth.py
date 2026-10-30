@@ -4,7 +4,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_register_login_and_me(async_client):
+async def test_register_login_and_me(async_client, db_session):
     email = f"u_{uuid.uuid4().hex}@example.com"
     username = f"user_{uuid.uuid4().hex[:8]}"
     password = "test_password_123"
@@ -19,7 +19,17 @@ async def test_register_login_and_me(async_client):
     )
     assert register_resp.status_code == 201
     register_data = register_resp.json()
-    assert "access_token" in register_data
+    assert register_data["email"] == email
+    assert register_data["username"] == username
+    assert "access_token" not in register_data
+    assert "hashed_password" not in register_data
+    assert "set-cookie" not in register_resp.headers
+    from sqlalchemy import select
+    from app.models.auth_session import AuthSession
+    sessions = await db_session.execute(select(AuthSession).where(AuthSession.user_id == register_data["id"]))
+    assert sessions.scalars().all() == []
+    assert (await async_client.post('/api/auth/refresh')).status_code == 410
+    assert (await async_client.get('/api/auth/me')).status_code == 401
 
     login_resp = await async_client.post(
         "/api/auth/login",

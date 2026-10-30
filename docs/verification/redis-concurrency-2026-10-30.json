@@ -1,0 +1,102 @@
+{
+  "database": "C:\\Users\\Jiajun Eleen\\Documents\\ChatGPT\\Ai求职助手项目\\.local\\redis-validation\\bbf746bf531646318b9ce4ff201251b1\\test.db",
+  "model": "deterministic 220 chunks, 20ms/chunk",
+  "scenarios": [
+    {
+      "concurrency": 2,
+      "tasks": 12,
+      "peak_active": 2,
+      "elapsed_seconds": 40.058,
+      "mean_run_seconds": 6.627,
+      "sqlite_commits_including_claims": 86,
+      "snapshot_saves": 72,
+      "snapshots_per_run": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ],
+      "redis_events": 696,
+      "observations": 2157,
+      "sqlite_lock_errors": 0,
+      "unique_claims": 12,
+      "text_exact_match": true,
+      "replay_exact_match": true,
+      "snapshots_monotonic": true
+    },
+    {
+      "concurrency": 4,
+      "tasks": 12,
+      "peak_active": 4,
+      "elapsed_seconds": 20.038,
+      "mean_run_seconds": 6.577,
+      "sqlite_commits_including_claims": 88,
+      "snapshot_saves": 72,
+      "snapshots_per_run": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ],
+      "redis_events": 697,
+      "observations": 1247,
+      "sqlite_lock_errors": 0,
+      "unique_claims": 12,
+      "text_exact_match": true,
+      "replay_exact_match": true,
+      "snapshots_monotonic": true
+    },
+    {
+      "concurrency": 8,
+      "tasks": 12,
+      "peak_active": 8,
+      "elapsed_seconds": 13.222,
+      "mean_run_seconds": 6.504,
+      "sqlite_commits_including_claims": 92,
+      "snapshot_saves": 72,
+      "snapshots_per_run": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+      ],
+      "redis_events": 698,
+      "observations": 1034,
+      "sqlite_lock_errors": 0,
+      "unique_claims": 12,
+      "text_exact_match": true,
+      "replay_exact_match": true,
+      "snapshots_monotonic": true
+    }
+  ],
+  "checks": {
+    "admission": "16 identical -> 1 run; same session 8 -> 1 admitted; user quota 8 -> 3 admitted",
+    "redis": "attempt fence, exact stream cap, active no TTL, terminal TTL passed"
+  },
+  "redis_version": "7.4.11",
+  "passed": true
+}

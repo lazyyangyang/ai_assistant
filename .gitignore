@@ -16,3 +16,16 @@ frontend/.env.*
 
 # Local SQLite（含用户数据，勿提交或随源码交付）
 *.db
+*.db-shm
+*.db-wal
+
+# Local tooling caches and temporary QA outputs
+.codex/
+.pnpm-store/
+tmp_docqa/
+tmp_ts_qa/
+frontend/test-results/
+frontend/playwright-report/
+
+# Portable Redis and disposable integration-test artifacts
+.local/

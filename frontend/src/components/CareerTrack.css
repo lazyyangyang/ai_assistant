@@ -1,0 +1,24 @@
+.career-track {
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--foreground) 5%, transparent), transparent 65%), var(--card);
+  color: var(--foreground);
+}
+.track-scene { display: block; width: 100%; height: clamp(300px, 34vw, 500px); }
+.track-runner { transform-origin: 600px 260px; animation: career-bounce 0.32s ease-in-out infinite; }
+.track-grid { transform-origin: 600px 100px; animation: career-road 3s cubic-bezier(0.55, 0.1, 0.8, 0.5) infinite reverse; }
+.track-shadow { transform-origin: 600px 338px; animation: career-shadow 0.32s ease-in-out infinite; }
+.career-track:not(.is-ready) .track-scene *,
+.is-paused .track-scene * { animation-play-state: paused; }
+/* 四肢由 SVG SMIL 驱动，CSS 只控制身体、阴影和跑道。 */
+@keyframes career-bounce {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-6px); }
+  80% { transform: translateY(-2px); }
+}
+@keyframes career-road { from { transform: scale(0.02); opacity: 0; } 25% { opacity: 0.1; } to { transform: scale(1.2); opacity: 0.18; } }
+@keyframes career-shadow { 50% { transform: scaleX(0.8); opacity: 0.07; } }
+@media (prefers-reduced-motion: reduce) {
+  .career-track .track-scene * { animation: none; }
+  .track-grid { display: none; }
+  .track-toggle { display: none; }
+}

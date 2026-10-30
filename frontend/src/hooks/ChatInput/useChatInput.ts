@@ -1,3 +1,6 @@
+import axios from 'axios'
+import { useOperationGuard } from '@/hooks/useOperationGuard'
+import { authSession } from '@/lib/authSession'
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from 'react'
 import { useToast } from '@/contexts/ToastContext'
 import { apiTranscribeAudio } from '@/lib/api'
@@ -31,6 +34,7 @@ export function useChatInput({
   disabled = false,
   enableVoiceInput = false,
 }: UseChatInputOptions) {
+  const begin = useOperationGuard()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { toast } = useToast()
   const [isRecording, setIsRecording] = useState(false)
@@ -40,6 +44,7 @@ export function useChatInput({
   const chunksRef = useRef<BlobPart[]>([])
   const mimeTypeRef = useRef('')
   const stopSeqRef = useRef(0)
+  const releaseOperationRef = useRef<(() => void) | null>(null)
 
   const isVoiceBusy = isRecording || isTranscribing
   const busy = disabled || isVoiceBusy
@@ -52,18 +57,27 @@ export function useChatInput({
   }
 
   useEffect(() => {
-    return () => {
-      try {
-        mediaRecorderRef.current?.stop()
-      } catch {
-        // ignore
+    const stop = () => {
+      stopSeqRef.current++
+      releaseOperationRef.current?.()
+      releaseOperationRef.current = null
+      const recorder = mediaRecorderRef.current
+      if (recorder) {
+        recorder.onstop = null
+        recorder.ondataavailable = null
+        if (recorder.state !== 'inactive') recorder.stop()
       }
       cleanupStream()
+      mediaRecorderRef.current = null
+      setIsRecording(false)
+      setIsTranscribing(false)
     }
+    const unsubscribe = authSession.subscribe(() => { if (!authSession.canRequest()) stop() })
+    return () => { unsubscribe(); stop() }
   }, [])
 
   const startRecording = async () => {
-    if (!enableVoiceInput || busy) return
+    if (!enableVoiceInput || busy || !authSession.canRequest()) return
     if (!navigator.mediaDevices?.getUserMedia) {
       toast({ title: t('ChatInput.unsupportedVoiceTitle'), message: t('ChatInput.unsupportedVoiceMessage'), variant: 'error' })
       return
@@ -71,6 +85,9 @@ export function useChatInput({
 
     stopSeqRef.current += 1
     const seq = stopSeqRef.current
+    const operation = begin()
+    releaseOperationRef.current = operation.release
+    const current = () => operation.current() && seq === stopSeqRef.current
 
     setIsRecording(true)
     setIsTranscribing(false)
@@ -79,6 +96,7 @@ export function useChatInput({
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!current()) { stream.getTracks().forEach(track => track.stop()); operation.release(); return }
       streamRef.current = stream
 
       const mimeType = pickSupportedMimeType()
@@ -92,7 +110,7 @@ export function useChatInput({
       }
 
       recorder.onstop = async () => {
-        if (seq !== stopSeqRef.current) return
+        if (!current()) { operation.release(); return }
 
         const chunks = chunksRef.current
         chunksRef.current = []
@@ -102,22 +120,29 @@ export function useChatInput({
         try {
           const blobType = mimeTypeRef.current || (chunks[0] as Blob | undefined)?.type || 'audio/webm'
           const blob = new Blob(chunks, { type: blobType })
-          const res = await apiTranscribeAudio(blob, 'zh')
+          const res = await apiTranscribeAudio(blob, 'zh', { signal: operation.signal })
+          if (!current()) return
           onChange(res.text)
           textareaRef.current?.focus()
         } catch (err) {
+          if (!current() || axios.isCancel(err)) return
           const msg = (err as Error).message || t('ChatInput.unknownError')
           toast({ title: t('ChatInput.transcribeFailureTitle'), message: msg, variant: 'error' })
         } finally {
-          cleanupStream()
-          setIsTranscribing(false)
-          mediaRecorderRef.current = null
-          mimeTypeRef.current = ''
+          operation.release()
+          if (current()) {
+            cleanupStream()
+            setIsTranscribing(false)
+            mediaRecorderRef.current = null
+            mimeTypeRef.current = ''
+          }
         }
       }
 
       recorder.start(250)
     } catch (err) {
+      operation.release()
+      if (!current() || axios.isCancel(err)) return
       setIsRecording(false)
       cleanupStream()
       const msg = (err as Error).message || t('ChatInput.unknownError')
@@ -126,7 +151,7 @@ export function useChatInput({
   }
 
   const stopRecording = () => {
-    if (!mediaRecorderRef.current) return
+    if (!mediaRecorderRef.current) { stopSeqRef.current++; setIsRecording(false); return }
     if (mediaRecorderRef.current.state !== 'recording') return
     try {
       mediaRecorderRef.current.stop()
@@ -138,12 +163,12 @@ export function useChatInput({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (value.trim()) onSend()
+      if (!busy && value.trim() && authSession.canRequest()) onSend()
     }
   }
 
   const handleVoicePointerDown = async (e: PointerEvent<HTMLButtonElement>) => {
-    if (!enableVoiceInput || busy) return
+    if (!enableVoiceInput || busy || !authSession.canRequest()) return
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
     await startRecording()

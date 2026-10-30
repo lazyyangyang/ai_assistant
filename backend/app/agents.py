@@ -75,35 +75,28 @@ async def stream_agent_response(
 
 
 async def extract_jd_structured(jd_text: str) -> dict[str, object]:
-    """Extract structured JD information in JSON format."""
+    """提取并校验 JD；错误交给 Worker 记录，避免空结果覆盖已有分析。"""
     llm = _build_llm(streaming=False)
     messages = [
-        SystemMessage(
-            content=(
-                "你是 JD 结构化抽取器。请把输入 JD 解析为 JSON，且仅输出 JSON。"
-                '字段固定为: "skills", "responsibilities", "hard_requirements", "summary"。'
-                "skills/responsibilities/hard_requirements 必须是字符串数组，summary 为字符串。"
-            )
-        ),
-        HumanMessage(content=jd_text[:12000]),
+        SystemMessage(content=(
+            "你是 JD 结构化抽取器。请把输入 JD 解析为 JSON，且仅输出 JSON。"
+            '字段固定为: "skills", "responsibilities", "hard_requirements", "summary"。'
+            "skills/responsibilities/hard_requirements 必须是字符串数组，summary 为字符串。"
+        )),
+        HumanMessage(content=jd_text),
     ]
-    try:
-        resp = await llm.ainvoke(messages)
-        content = resp.content if isinstance(resp.content, str) else str(resp.content)
-        parsed = json.loads(content)
-        return {
-            "skills": list(parsed.get("skills", [])),
-            "responsibilities": list(parsed.get("responsibilities", [])),
-            "hard_requirements": list(parsed.get("hard_requirements", [])),
-            "summary": str(parsed.get("summary", "")),
-        }
-    except Exception:
-        return {
-            "skills": [],
-            "responsibilities": [],
-            "hard_requirements": [],
-            "summary": "",
-        }
+    response = await llm.ainvoke(messages)
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    result = json.loads(content)
+    if not isinstance(result, dict) or not isinstance(result.get('summary'), str):
+        raise ValueError('Invalid JD summary')
+    list_fields = ('skills', 'responsibilities', 'hard_requirements')
+    for field in list_fields:
+        if not isinstance(result.get(field), list) or not all(isinstance(item, str) for item in result[field]):
+            raise ValueError('Invalid JD list')
+    if not result['summary'].strip() and not any(result[field] for field in list_fields):
+        raise ValueError('Empty JD extraction')
+    return {field: result[field] for field in (*list_fields, 'summary')}
 
 
 async def extract_interview_feedback(

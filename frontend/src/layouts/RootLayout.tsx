@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { LogOut, Menu, Moon, Sun, User, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRootLayout } from '@/hooks/RootLayout/useRootLayout'
@@ -15,7 +15,8 @@ const nav: NavItem[] = [
 ]
 
 export function RootLayout() {
-  const { user, navOpen, theme, toggleNav, closeNav, toggleTheme, handleLogout } = useRootLayout()
+  const isFullWidthPage = ['/', '/login', '/register'].includes(useLocation().pathname)
+  const { user, logoutPending, navOpen, theme, toggleNav, closeNav, toggleTheme, handleLogout } = useRootLayout()
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
@@ -72,6 +73,7 @@ export function RootLayout() {
                     variant="ghost"
                     size="sm"
                     onClick={handleLogout}
+                    disabled={logoutPending}
                     className="h-8 gap-1 text-muted-foreground"
                   >
                     <LogOut className="size-3.5" />
@@ -140,7 +142,7 @@ export function RootLayout() {
           </div>
         )}
       </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+      <main className={isFullWidthPage ? 'w-full flex-1 py-8' : 'mx-auto w-full max-w-5xl flex-1 px-4 py-8'}>
         <Outlet />
       </main>
     </div>
